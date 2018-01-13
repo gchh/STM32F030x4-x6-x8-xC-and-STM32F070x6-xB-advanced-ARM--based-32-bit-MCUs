@@ -92,3 +92,32 @@ AHB时钟（HCLK）和APB（PCLK）为各个外设和存储器提供时钟，在
 从待机模式唤醒后，程序会像复位后一样重新运行（采样启动模式引脚，载入选项字节，读取复位向量等）。电源控制与状态寄存器（PWR_CSR）的SBF位指示MCU曾处于待机模式。  
 ![](https://i.imgur.com/wbLiFFi.png)  
 
+#####停机模式中I/O的状态  
+在停机模式中，所有的I/O口都是高阻抗状态，除了：  
+- Reset复位引脚（始终有效）  
+- PC13如果配置为RTC功能，PC14和PC15如果配置成LSE功能  
+- WKUPx引脚  
+
+#####调试模式  
+默认情况下，在停机和待机模式下，调试是无法使用的；因为此时ARM Cortex-M0内核时钟是关闭的。  
+然而，通过设置DBGMCU_CR寄存器的某些位，即使在低功耗模式，也可以调试软件。  
+
+####低功耗模式下的RTC唤醒  
+通过RTC报警，RTC可以将MCU从低功耗中唤醒。可以选择三个RTC时钟源中的2个来实现此目的，通过设置RTC域控制寄存器（RCC_BDCR）的RTCSEL[1:0]位：  
+- 低功耗的32.768kHz外部晶振（LSE）：该时钟源提供了低功耗（典型条件下消耗小于1uA）且精确的时间基准。  
+- 低功耗的内部RC振荡器（LSI）：使用该时钟源的优点在于节省的32.768kHz晶振的费用。内部RC振荡器被设计成增加最小的功耗。  
+有了时钟源，要使用RTC报警事件将MCU从停机模式唤醒，还需要如下的配置：  
+- 配置EXTI 17上升沿触发  
+- 配置RTC产生RTC报警  
+将MCU从待机模式唤醒，不需要配置EXTI 17，只需要RTC报警。  
+
+###Power control registers 电源控制寄存器  
+可用半字（16-bit）或字（32-bit）操作这些外设寄存器。  
+####Power control register(PWR_CR) 电源控制寄存器  
+![](https://i.imgur.com/IaCJntH.png)  
+
+####Power control/status register(PWR_CSR) 电源控制与状态寄存器  
+![](https://i.imgur.com/BxF9rxG.png)  
+
+###PWE register map  
+![](https://i.imgur.com/LxSO1he.png)  
