@@ -288,3 +288,26 @@ APB外设时钟和DMA时钟可以由软件关闭。
 
 ####RCC寄存器  
 #####时钟控制寄存器（RCC_CR）  
+![](https://i.imgur.com/bvgUGS6.png)  
+![](https://i.imgur.com/sxcrdZ8.png)  
+
+#####时钟配置寄存器（RCC_CFGR）  
+![](https://i.imgur.com/PYWQ4xf.png)  
+![](https://i.imgur.com/Dfl3gIw.png)  
+![](https://i.imgur.com/jIGdPmi.png)  
+
+#####时钟中断寄存器（RCC_CIR）  
+![](https://i.imgur.com/ueY8v1d.png)  
+![](https://i.imgur.com/vCBJ5Qu.png)  
+![](https://i.imgur.com/nr6wCmj.png)  
+
+#####APB外设复位寄存器2（RCC_APB2RSTR）  
+![](https://i.imgur.com/mHuDH0A.png)  
+![](https://i.imgur.com/or5nqNY.png)  
+![](https://i.imgur.com/63RnuQk.png)  
+
+#####APB外设复位寄存器1（RCC_APB1RSTR）  
+![](https://i.imgur.com/0CmLKpc.png)  
+![](https://i.imgur.com/PVxtXZF.png)  
+![](https://i.imgur.com/g7auaY0.png)  
+
