@@ -104,3 +104,46 @@ GPIOx_BSRR对GPIOx_ODR的置位/复位是一次性的，并不会将GPIOx_ODR中
 - 读取GPIOx_IDR的内容，可以了解IO口目前的状态  
 - 读取GPIOx_ODR的内容，可以获得最后写入的值  
 ![](https://i.imgur.com/9kAznMW.png)  
+###复用功能配置  
+当IO口配置成复用功能：  
+- 输出缓冲器可以配置成推挽或开漏模式  
+- 输出缓冲器由来自外设的信号驱动  
+- 施密特触发器打开  
+- 由GPIOx_PUPDR配置上拉/下拉  
+- 每个AHB时钟周期，IO引脚上的数据将被采集，存入GPIOx_IDR  
+- 读取GPIOx_IDR的数据，可以了解IO口目前的状态  
+![](https://i.imgur.com/56wKO2j.png)  
+###模拟配置  
+当IO口被配置成模拟口：  
+- 输出缓冲器关闭  
+- 施密特触发器被禁止，实现了模拟IO口的0消耗。施密特触发器的输出被强制为0  
+- 上拉和下拉被禁止  
+- 读GPIOx_IDR得到的值是0  
+######Analog GPIO configuration code example  
+
+	/* (1) Enable the peripheral clock of GPIOA, GPIOB and GPIOC */
+	/* (2) Select analog mode for PA1 */
+	/* (3) Select analog mode for PB1 */
+	/* (4) Select analog mode for PC0 */
+	RCC->AHBENR |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN
+	             | RCC_AHBENR_GPIOCEN; /* (1) */
+	GPIOA->MODER |= GPIO_MODER_MODER1; /* (2) */
+	GPIOB->MODER |= GPIO_MODER_MODER1; /* (3) */
+	GPIOC->MODER |= GPIO_MODER_MODER0; /* (4) */  
+![](https://i.imgur.com/Vh7dTCN.png)  
+###HSE或LSE振荡器引脚用作GPIO  
+当HSE或LSE振荡器关闭（复位后的默认状态），相关的引脚可以用作GPIO。  
+当HSE或LSE振荡器打开（RCC_CSR的HSEON或LSEON置位开启振荡器），相关的引脚GPIO配置失效。  
+当振荡器被配置使用外部时钟，余下的OSC_OUT或OSC32_OUT依然可以用作GPIO。  
+###在RTC电源域使用GPIO  
+当核心供电域断电（器件进入待机模式），PC13/PC14/PC15会失去GPIO功能。在这种情况下，如果它们的GPIO配置没有被RTC配置旁路，它们被设置成模拟输入模式。  
+关于IO由RTC控制的详情，可以参考RTC功能描述。  
+##GPIO寄存器  
+###GPIO模式寄存器（GPIOx_MODER）(x=A..D,F)  
+![](https://i.imgur.com/IGBck1l.png)  
+###GPIO输出类型寄存器（GPIOx_OTYPER）(x=A..D,F)  
+![](https://i.imgur.com/BSaynr2.png)  
+###GPIO输出速度寄存器（GPIOx_OSPEEDR）(x=A..D,F)  
+![](https://i.imgur.com/fkfSjih.png)  
+###GPIO上拉/下拉寄存器（GPIOx_PUPDR）(x=A..D,F)  
+![](https://i.imgur.com/2qEuv4J.png)  
