@@ -147,3 +147,43 @@ GPIOx_BSRR对GPIOx_ODR的置位/复位是一次性的，并不会将GPIOx_ODR中
 ![](https://i.imgur.com/fkfSjih.png)  
 ###GPIO上拉/下拉寄存器（GPIOx_PUPDR）(x=A..D,F)  
 ![](https://i.imgur.com/2qEuv4J.png)  
+###GPIO输入数据寄存器（GPIOx_IDR）(x=A..D,F)  
+![](https://i.imgur.com/hhi28c9.png)  
+###GPIO输出数据寄存器（GPIOx_ODR）(x=A..D,F)  
+![](https://i.imgur.com/PLHsPvo.png)  
+###GPIO置位/复位寄存器（GPIOx_BSRR）(x=A..D,F)  
+![](https://i.imgur.com/7ySYl7j.png)  
+![](https://i.imgur.com/B0mxQng.png)  
+###GPIO配置锁定寄存器（GPIOx_LCKR）(x=A..B)  
+![](https://i.imgur.com/yHTmYxL.png)  
+![](https://i.imgur.com/IywzbUA.png)  
+######Lock sequence code example  
+
+	/**
+	Description: This function locks the targeted pins of Port A configuration
+	This function can be easily modified to lock Port B
+	Parameter: lock contains the port pin mask to be locked*/
+	void LockGPIOA(uint16_t lock)
+	{
+		/* (1) Write LCKK bit to 1 and set the pin bits to lock */
+		/* (2) Write LCKK bit to 0 and set the pin bits to lock */
+		/* (3) Write LCKK bit to 1 and set the pin bits to lock */
+		/* (4) Read the Lock register */
+		/* (5) Check the Lock register (optionnal) */
+		GPIOA->LCKR = GPIO_LCKR_LCKK + lock; /* (1) */
+		GPIOA->LCKR = lock; /* (2) */
+		GPIOA->LCKR = GPIO_LCKR_LCKK + lock; /* (3) */
+		GPIOA->LCKR; /* (4) */
+		if ((GPIOA->LCKR & GPIO_LCKR_LCKK) == 0) /* (5) */
+		{
+			/* Manage an error */
+		}
+	}  
+###GPIO复用功能低位寄存器（GPIOx_AFRL）(x=A..B)  
+![](https://i.imgur.com/2AzYzhK.png)  
+###GPIO复用功能高位寄存器（GPIOx_AFRH）(x=A..B)  
+![](https://i.imgur.com/UwPUGe5.png)  
+###GPIO复位寄存器（GPIOx_BRR）(x=A..D,F)  
+![](https://i.imgur.com/Q32TSHW.png)  
+##GPIO寄存器映射  
+![](https://i.imgur.com/x8jUYUy.png)  
