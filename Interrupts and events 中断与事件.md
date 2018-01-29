@@ -80,3 +80,27 @@ STM32F0x0能够处理外部或内部事件唤醒内核（WFE）。唤醒事件�
 - 配置软件中断寄存器EXTI_SWIER相应的请求位  
 
 ###外部和内部中断/事件线映射  
+![](https://i.imgur.com/J0Zh4Ik.png)  
+![](https://i.imgur.com/hF2FqZ7.png)  
+![](https://i.imgur.com/n3lDY5m.png)  
+
+##EXTI寄存器  
+这些外设寄存器必须按字访问。  
+###Interrupt mask register(EXTI_IMR)中断屏蔽寄存器  
+![](https://i.imgur.com/gHHK6VS.png)  
+###Event mask register(EXTI_EMR)事件屏蔽寄存器  
+![](https://i.imgur.com/IMfeXGd.png)  
+###Rising trigger selection register(EXTI_RTSR)上升沿触发选择寄存器  
+![](https://i.imgur.com/Xib8hPS.png)  
+![](https://i.imgur.com/bxmGLDY.png)  
+###Falling trigger selection register(EXTI_FTSR)下降沿触发选择寄存器  
+![](https://i.imgur.com/HtEhpE7.png)  
+![](https://i.imgur.com/HgNjJhF.png)  
+###Software interrupt event register(EXTI_SWIER)软件中断事件寄存器  
+![](https://i.imgur.com/80mQ5HY.png)  
+###Pending register(EXTI_PR)挂起寄存器  
+![](https://i.imgur.com/dom0LLH.png)  
+![](https://i.imgur.com/GyS9mWW.png)  
+
+##EXTI register map  
+![](https://i.imgur.com/mVYlk3i.png)  
