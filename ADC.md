@@ -196,3 +196,33 @@ ADC设置EOSMP标志表示采样结束。
 注意：如果只转换一个通道，将转换序列长度设为1。  
 ADC不能即是连续模式又是间断模式：即禁止同时置位DISCEN和CONT。  
 ###开始转换（ADSTART）  
+软件启动ADC转换，通过设置ADSTART=1。  
+当ADSTART=1时，转换：  
+- 如果EXTEN=00(软件触发)，立即开始  
+- 如果EXTEN≠00，在下一个所选硬件触发的有效边沿，开始  
+ADSTART也用来指示ADC转换是否正在进行。当ADC空闲（ADSTART=0）时，可以重新配置ADC。  
+ADSTART由硬件清零：  
+- 软件触发（EXTEN=0）的单次模式(CONT=0)：在序列转换结束（EOSEQ=1）后  
+- 软件触发（EXTEN=0）的间断模式（CONT=0,DISCEN=1）：在转换结束（EOC=1）后  
+- 在任何情况下，软件调用并执行ADSTP后  
+注意：在连续模式（CONT=1），当EOSEQ=1时，ADSTART不会被硬件清零，因为序列转换会自动重新开始。  
+选择硬件触发的单词模式（EXTEN=01,CONT=0）时，当EOSEQ=1时，ADSTART不会被硬件清零。这是为了避免需要软件设置ADSTART，以确保不会错过下面的触发事件。  
+###时序  
+转换开始到结束的时间=设置的采样时间+逐次逼近时间（与转换精度有关）：  
+t<sub>ADC</sub> = t<sub>SMPL</sub> + t<sub>SAR</sub> = [1.5<sub>|min</sub> + 12.5<sub>|12bit</sub>] x t<sub>ADC_CLK</sub>  
+t<sub>ADC</sub> = t<sub>SMPL</sub> + t<sub>SAR</sub> = 107.1 ns<sub>|min</sub> + 892.8 ns<sub>|12bit</sub> = 1 μs<sub>|min</sub>(for f<sub>ADC_CLK</sub> = 14 MHz)  
+![](https://i.imgur.com/9xZmeaG.png)  
+![](https://i.imgur.com/4t8pxel.png)  
+###停止正在进行的转换（ADSTP）   
+软件通过设置ADC_CR寄存器的ADSTP=1，可以停止任何正在进行的转换。这会复位ADC的操作，ADC进入空闲，为新的转换准备。  
+当ADSTP置位，任何正在进行的转换被停止，结果被丢弃（当前的转换值不会更新到ADC_DR中）。扫描序列也被停止并复位，这意味着重启ADC将会重新开始新的序列转换。  
+一旦停止过程完成，ADSTP和ADSTART将由硬件清零，并且，软件必须等待ADSTART=0后才能开启新的转换。  
+![](https://i.imgur.com/gPfAk7j.png)  
+##外部触发转换和触发极性（EXTSEL,EXTEN）  
+一次转换或一个序列转换可由软件或外部事件（比如定时器捕捉）触发开始。如果EXTEN[1:0]!="0b00"，并且ADSTART=1，则外部事件所选的极性会触发一次转换。  
+转换进行期间或ADSTART=0，发生的任何硬件触发都会被忽略。  
+![](https://i.imgur.com/yyzdZ6f.png)  
+注意：外部触发极性只能在ADC不在转换时（ADSTART=0）改变。  
+EXTSEL[2:0]用于在8个外部触发事件间选择。  
+![](https://i.imgur.com/Emtkjtg.png)  
+软件触发源事件由置位ADC_CR的ADSTART位产生。  
