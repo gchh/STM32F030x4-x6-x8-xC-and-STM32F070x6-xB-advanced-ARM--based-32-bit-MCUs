@@ -242,3 +242,148 @@ EXTSEL[2:0]用于在8个外部触发事件间选择。
 　-  第一个触发：整个序列被转换：通道0,3,7,10。每次转换会产生一次EOC事件，最后一次会同时产生EOSEQ事件。  
 　-  后面任何触发都会重新开始整个序列的转换，通道0,3,7,10  
 注意：ADC不能同时设置为间断和连续模式：禁止同时设置DISCEN=1和CONT=1。  
+###可编程分辨率-快速转换模式  
+降低ADC转换分辨率可以获得更快的转换时间。  
+通过ADC_CFGR1寄存器的RES[1:0]位设置选择12,10,8或6位分辨率。如果应用不要求高精度，可以降低精度来加快转换时间。  
+注意：当ADEN=0时，才能改变RES[1:0]。  
+不管精度选择多少，转换结果都是12位的，未使用的低位补零。  
+低精度减少逐次逼近步骤所需的转换时间，如下表所示：  
+![](https://i.imgur.com/QB7TF9E.png)  
+###转换结束，采样结束（EOC和EOSMP）  
+转换结束标志EOC指示ADC转换结束。  
+当新的转换数据存入ADC_DR中可被读取，ADC_ISR寄存器的EOC位马上被置位。如果ADC_IER的EOCIE=1，则转换结束会产生中断。通过读ADC_DR，或向EOC写1，来清零EOC。  
+ADC_ISR中的EOSMP=1表示ADC采样结束。向EOSMP写1，来清零EOSMP。如果ADC_IER的EOSMPIE=1，则采样结束会产生中断。  
+此中断的目的是允许处理与转换同步。通常，模拟多路复用器可以在转换阶段的隐蔽时间访问，以便在下一次采样开始时多路复用器被定位。  
+注意：在采样结束和转换结束之间只有很短的时间，强烈建议使用轮询或WFE指令，而不是中断和WFI指令。  
+###序列转换结束（EOSEQ）  
+EOSEQ=1表示一个完整的序列转换结束。  
+序列最后转换的结果存入ADC_DR时，ADC_ISR的EOSEQ置位。如果ADC_IER的EOSEQIE=1，则还会产生中断。通过向EOSEQ写1，将其清零。  
+###时序图示例（单次/连续模式，硬件/软件触发）  
+![](https://i.imgur.com/eoKC4wi.png)  
+######Single conversion sequence code example - Software trigger  
+
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select CHSEL0, CHSEL9, CHSEL10 andCHSEL17 for VRefInt */
+	/* (3) Select a sampling mode of 111 i.e. 239.5 ADC clk to be greater than 17.1us */
+	/* (4) Wake-up the VREFINT (only for VBAT, Temp sensor and VRefInt) */
+	//ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL0 | ADC_CHSELR_CHSEL9
+				 | ADC_CHSELR_CHSEL10 | ADC_CHSELR_CHSEL17; /* (2) */
+	ADC1->SMPR |= ADC_SMPR_SMP_0 | ADC_SMPR_SMP_1 | ADC_SMPR_SMP_2; /* (3) */
+	ADC->CCR |= ADC_CCR_VREFEN; /* (4) */
+	while (1)
+	{
+		/* Performs the AD conversion */
+		ADC1->CR |= ADC_CR_ADSTART; /* Start the ADC conversion */
+		for (i=0; i < 4; i++)
+		{
+			while ((ADC1->ISR & ADC_ISR_EOC) == 0) /* Wait end of conversion */
+			{
+				/* For robust implementation, add here time-out management */
+			}
+			ADC_Result[i] = ADC1->DR; /* Store the ADC conversion result */
+		}
+		ADC1->CFGR1 ^= ADC_CFGR1_SCANDIR; /* Toggle the scan direction */
+	}  
+![](https://i.imgur.com/1JvOcQb.png)  
+######Continuous conversion sequence code example - Software trigger  
+
+	/* This code example configures the AD conversion in continuous mode and in
+	   backward scan. It also enable the interrupts. */
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select the continuous mode and scanning direction */
+	/* (3) Select CHSEL1, CHSEL9, CHSEL10 and CHSEL17 */
+	/* (4) Select a sampling mode of 111 i.e. 239.5 ADC clk to be greater than 17.1us */
+	/* (5) Enable interrupts on EOC, EOSEQ and overrrun */
+	/* (6) Wake-up the VREFINT (only for VBAT, Temp sensor and VRefInt) */
+	//ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_CONT | ADC_CFGR1_SCANDIR; /* (2) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL9
+				 | ADC_CHSELR_CHSEL10 | ADC_CHSELR_CHSEL17; /* (3) */
+	ADC1->SMPR |= ADC_SMPR_SMP_0 | ADC_SMPR_SMP_1 | ADC_SMPR_SMP_2; /* (4) */
+	ADC1->IER = ADC_IER_EOCIE | ADC_IER_EOSEQIE | ADC_IER_OVRIE; /* (5) */
+	ADC->CCR |= ADC_CCR_VREFEN; /* (6) */
+	/* Configure NVIC for ADC */
+	/* (7) Enable Interrupt on ADC */
+	/* (8) Set priority for ADC */
+	NVIC_EnableIRQ(ADC1_COMP_IRQn); /* (7) */
+	NVIC_SetPriority(ADC1_COMP_IRQn,0); /* (8) */  
+![](https://i.imgur.com/HGICBT6.png)  
+######Single conversion sequence code example - Hardware trigger  
+
+	/* Configure the ADC, the ADC and its clock having previously been enabled. */
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select the external trigger on rasing edge and external trigger on TIM15_TRGO */
+	/* (3) Select CHSEL0, 1, 2 and 3 */
+	//ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_EXTEN_0 | ADC_CFGR1_EXTSEL_2; /* (2) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL0 | ADC_CHSELR_CHSEL1
+	             | ADC_CHSELR_CHSEL2 | ADC_CHSELR_CHSEL3; /* (3) */   
+![](https://i.imgur.com/PBsa0X5.png)  
+######Continuous conversion sequence code example - Hardware trigger  
+
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select the external trigger on TIM15_TRGO (EXTSEL = 100),falling
+	       edge (EXTEN = 10), the continuous mode (CONT = 1)*/
+	/* (3) Select CHSEL0/1/2/3 */
+	/* (4) Enable interrupts on EOC, EOSEQ and overrrun */
+	//ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_EXTEN_1 | ADC_CFGR1_EXTSEL_2
+	             | ADC_CFGR1_CONT; /* (2) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL0 | ADC_CHSELR_CHSEL1
+	             | ADC_CHSELR_CHSEL2 | ADC_CHSELR_CHSEL3; /* (3)*/
+	ADC1->IER = ADC_IER_EOCIE | ADC_IER_EOSEQIE | ADC_IER_OVRIE; /* (4) */
+	/* Configure NVIC for ADC */
+	/* (1) Enable Interrupt on ADC */
+	/* (2) Set priority for ADC */
+	NVIC_EnableIRQ(ADC1_COMP_IRQn); /* (1) */
+	NVIC_SetPriority(ADC1_COMP_IRQn,0); /* (2) */  
+##数据管理  
+###数据寄存器和数据对齐（ADC_DR,ALIGN）  
+当转换结束（EOC=1），转换结果被存放到16位宽的ADC_DR数据寄存器中。  
+ADC_DR的格式取决于所配置的数据对齐方式和精度。  
+ADC_CFGR1的ALIGN位用于选择数据对齐方式。ALIGN=0数据右对齐，ALIGN=1数据左对齐。  
+![](https://i.imgur.com/90gtiM2.png)  
+###ADC溢出  
+当转换的数据未被CPU或DMA及时读取，而新的转换数据已经有效时，就发生溢出，OVR置位。  
+若EOC=1时，新的转换已经完成，则ADC_ISR中的OVR会被置位。如果ADC_IER的OVRIE=1，则产生中断。  
+当溢出发生，ADC会继续转换，除非软件设置ADC_CR的ADSTP=1停止转换。  
+通过向OVR写1，将其清零。  
+当发生溢出时，根据ADC_CFGR1的OVRMOD位的设置，决定ADC_DR中的数据是保持还是被覆盖：  
+- OVRMOD=0：ADC_DR中的数据保持旧值，新的转换结果丢弃。如果OVR仍然为1，后续的转换会被执行但是转换结果会被丢弃。  
+- OVRMOD=1：ADC_DR会被写入新的转换结果，而前次未被读出的结果丢弃。如果OVR依然为1，后续的转换会继续执行，而ADC_DR总是写入最新得到的转换结果。  
+![](https://i.imgur.com/DPdOjuV.png)  
+###不使用DMA管理序列转换的结果  
+如果ADC转换足够慢，则转换序列可由软件处理。在这种情况下，软件需要利用ECO及其相关的中断去处理每一次的转换结果。每次转换结束ADC_ISR的EOC位置位，可以读取ADC_DR里的转换结果。ADC_CFGR1的OVRMOD可以设置为0，将溢出作为一个错误处理。  
+###不使用DMA不考虑溢出管理转换数据  
+ADC转换一个或多个通道且不用每次转换完都读取结果；这种情况下，OVRMOD必须配置为1，并且软件要忽略OVR标志。当OVRMOD=1，发生溢出不会阻止ADC继续转换，并且ADC_DR中的值总是最新的转换结果。  
+###使用DMA管理转换数据  
+因为所有通道的转换结果都要存放到一个数据寄存器中，所以当转换通道超过1个时，使用DMA会更高效。这样可以避免存放到ADC_DR寄存器时丢失转换结果。  
+当DMA模式使能（ADC_CFGR1寄存器的DMAEN置1）时，每个通道转换结束会产生DMA请求。这样就允许ADC_DR中的转换结果传送到软件选择的目标位置。  
+注意：ADC_CFGR1的DMAEN位必须在ADC校准完成后设置。  
+尽管如此，如果因为DMA不能及时处理DMA请求而产生溢出（OVR=1），ADC将停止发出DMA请求，因此新的转换结果也不会再通过DMA传输。这也意味着所有已经传输到RAM的数据可以被认为是有效的(发生溢出后的数据不会再传输)。  
+根据OVRMOD的设置，发生溢出时，ADC_DR寄存器中的数据或保持或被覆盖。  
+OVR=1时，DMA请求被阻止，直到软件清除OVR。  
+有2种不同的DMA模式，取决于ADC_CFGR1寄存器的DMACFG的配置：  
+- DMA一次模式（DMACFG=0）：当DMA传输固定数量的数据时，选择此模式。  
+- DMA循环模式（DMACFG=1）：当在循环模式或双缓冲模式下使用DMA时，应该选择此模式。  
+####DMA一次模式（DMACFG=0）  
+在此模式，ADC在每次新的转换数据有效时发出DMA请求，一旦DMA到达最后一次传输（DMA_EOT中断产生），ADC停止发送DMA请求，即使再次启动转换。  
+######DMA one shot mode sequence code example  
+
+	/* (1) Enable the peripheral clock on DMA */
+	/* (2) Enable DMA transfer on ADC - DMACFG is kept at 0 for one shot mode */
+	/* (3) Configure the peripheral data register address */
+	/* (4) Configure the memory address */
+	/* (5) Configure the number of DMA tranfer to be performs on DMA channel 1 */
+	/* (6) Configure increment, size and interrupts */
+	/* (7) Enable DMA Channel 1 */
+	RCC->AHBENR |= RCC_AHBENR_DMA1EN; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_DMAEN; /* (2) */
+	DMA1_Channel1->CPAR = (uint32_t) (&(ADC1->DR)); /* (3) */
+	DMA1_Channel1->CMAR = (uint32_t)(ADC_array); /* (4) */
+	DMA1_Channel1->CNDTR = NUMBER_OF_ADC_CHANNEL; /* (5) */
+	DMA1_Channel1->CCR |= DMA_CCR_MINC | DMA_CCR_MSIZE_0 | DMA_CCR_PSIZE_0
+	                    | DMA_CCR_TEIE | DMA_CCR_TCIE ; /* (6) */
+	DMA1_Channel1->CCR |= DMA_CCR_EN; /* (7) */  
+当DMA传输完成（配置在DMA控制器中的所有传输都已经完成）：  
