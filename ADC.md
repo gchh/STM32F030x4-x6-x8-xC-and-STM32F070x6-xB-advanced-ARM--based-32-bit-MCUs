@@ -387,3 +387,28 @@ OVR=1时，DMA请求被阻止，直到软件清除OVR。
 	                    | DMA_CCR_TEIE | DMA_CCR_TCIE ; /* (6) */
 	DMA1_Channel1->CCR |= DMA_CCR_EN; /* (7) */  
 当DMA传输完成（配置在DMA控制器中的所有传输都已经完成）：  
+- ADC数据寄存器的内容冻结  
+- 任何正在进行的转换被终止且部分结果被丢弃  
+- 不会发送新的DMA请求给DMA控制器。如果仍有转换被启动，这种处理可以避免产生溢出错误。  
+- ADC停止序列扫描并将其复位  
+- DMA停止  
+####DMA循环模式（DMACFG=1）  
+在这种模式下，每次新的转换结果有效时，ADC会发出DMA请求，即使DMA已达到最后一个DMA传输。处理连续不断的模拟输入数据流时，可以使用此模式。  
+######DMA circular mode sequence code example  
+
+	/* (1) Enable the peripheral clock on DMA */
+	/* (2) Enable DMA transfer on ADC and circular mode */
+	/* (3) Configure the peripheral data register address */
+	/* (4) Configure the memory address */
+	/* (5) Configure the number of DMA tranfer to be performs on DMA channel 1 */
+	/* (6) Configure increment, size, interrupts and circular mode */
+	/* (7) Enable DMA Channel 1 */
+	RCC->AHBENR |= RCC_AHBENR_DMA1EN; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_DMAEN | ADC_CFGR1_DMACFG; /* (2) */
+	DMA1_Channel1->CPAR = (uint32_t) (&(ADC1->DR)); /* (3) */
+	DMA1_Channel1->CMAR = (uint32_t)(ADC_array); /* (4) */
+	DMA1_Channel1->CNDTR = NUMBER_OF_ADC_CHANNEL; /* (5) */
+	DMA1_Channel1->CCR |= DMA_CCR_MINC | DMA_CCR_MSIZE_0 | DMA_CCR_PSIZE_0
+	                    | DMA_CCR_TEIE | DMA_CCR_CIRC; /* (6) */
+	DMA1_Channel1->CCR |= DMA_CCR_EN; /* (7) */  
+##低功耗特性  
