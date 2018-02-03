@@ -412,3 +412,141 @@ OVR=1时，DMA请求被阻止，直到软件清除OVR。
 	                    | DMA_CCR_TEIE | DMA_CCR_CIRC; /* (6) */
 	DMA1_Channel1->CCR |= DMA_CCR_EN; /* (7) */  
 ##低功耗特性  
+###等待模式转换  
+低频率时钟下容易发生ADC溢出，使用等待模式可以简化软件以及优化应用程序性能。  
+当ADC_CFGR1的WAIT=1时，只有前次的转换结果处理后（ADC_DR被读取，或EOC被清零），才开始新的转换。  
+这种模式自动调整ADC速度以适应系统读取转换结果的速度。  
+注意：在转换进行时或等待期间，发生的任何硬件触发，都将被忽略。  
+![](https://i.imgur.com/X5MuBhv.png)  
+######Wait mode sequence code example  
+
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select the continuous mode and the wait mode */
+	/* (3) Select CHSEL1/2/3 */
+	ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_CONT | ADC_CFGR1_WAIT; /* (2) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL2
+	             | ADC_CHSELR_CHSEL3; /* (3)*/
+	ADC1->CR |= ADC_CR_ADSTART; /* start the ADC conversions */  
+###自动关闭模式（AUTOFF）  
+ADC有自动电源管理功能，被称为自动关闭模式，由ADC_CFGR1的AUTOFF=1打开该功能。  
+当AUTOFF=1时，在无转换期间ADC一直断电直到启动转换（软件或硬件触发）。在转换触发事件和ADC开始采样之间，会自动插入一段启动时间。当序列转换完成，ADC自动关闭。  
+对于只需要相对较少的转换，或是转换请求间的时间间隔足够长（例如低频率的硬件触发）的应用，使用自动关闭模式会显著的减少功耗。  
+对于低时钟频率的应用，自动关闭模式和等待模式可以结合使用。这样在等待期间ADC会自动关闭，可以进一步降低功耗；一旦ADC_DR被读取，ADC会自动启动。  
+注意：参考复位与时钟控制（RCC）章节关于专用内部14MHz时钟的管理。ADC接口可以自动关闭HSI14以节省功耗。  
+![](https://i.imgur.com/TmrN7E4.png)  
+######Auto Off and no wait mode sequence code example  
+
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select the external trigger on TIM15_TRGO and rising edge and auto off */
+	/* (3) Select CHSEL1/2/3/4 */
+	/* (4) Enable interrupts on EOC, EOSEQ and overrrun */
+	ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_EXTEN_1 | ADC_CFGR1_EXTSEL_2
+	             | ADC_CFGR1_AUTOFF; /* (2) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL2
+	             | ADC_CHSELR_CHSEL3 | ADC_CHSELR_CHSEL4; /* (3) */
+	ADC1->IER = ADC_IER_EOCIE | ADC_IER_EOSEQIE | ADC_IER_OVRIE; /* (4) */  
+![](https://i.imgur.com/WmXC2Vq.png)  
+######Auto Off and wait mode sequence code example  
+
+	/* (1) Select HSI14 by writing 00 in CKMODE (reset value) */
+	/* (2) Select the external trigger on TIM15_TRGO and falling edge,
+	       the continuous mode, scanning direction and auto off */
+	/* (3) Select CHSEL1, CHSEL9, CHSEL10 and CHSEL17 */
+	/* (4) Enable interrupts on EOC, EOSEQ and overrrun */
+	ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE; /* (1) */
+	ADC1->CFGR1 |= ADC_CFGR1_EXTEN_0 | ADC_CFGR1_EXTSEL_2
+	             | ADC_CFGR1_SCANDIR | ADC_CFGR1_AUTOFF; /* (2) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL2
+	             | ADC_CHSELR_CHSEL3 | ADC_CHSELR_CHSEL4; /* (3) */
+	ADC1->IER = ADC_IER_EOCIE | ADC_IER_EOSEQIE | ADC_IER_OVRIE; /* (4) */  
+##模拟窗口看门狗（AWDEN,AWDSGL,AWDCH,AWD_HTR/LTR,AWD）  
+设置ADC_CFGR1的AWDEN=1，打开模拟窗口看门狗AWD。它用于监测一个通道或所有使能通道是否保持在所配置的电压范围内。  
+如果ADC转换的模拟电压低于或高于阈值，AWD模拟窗口看门狗状态位置位。这些阈值被编程在最多12位有效位的ADC_HTR和ADC_LTR16位寄存器中。ADC_IER的AWDIE=1，使能AWD产生中断。  
+AWD标志位，通过向其写1，清零。  
+当转换精度小于12位（由DRES[1:0]设置），设置的阈值低位要清零，因为内部的比较都是按12位左对齐进行的。  
+######Analog watchdog code example  
+
+	/* (1) Select the continuous mode and configure the Analog watchdog to monitor only CH17 */
+	/* (2) Define analog watchdog range : 16b-MSW is the high limit and 16b-LSW is the low limit */
+	/* (3) Enable interrupt on Analog Watchdog */
+	ADC1->CFGR1 |= ADC_CFGR1_CONT
+	             | (17 << 26) | ADC_CFGR1_AWDEN | ADC_CFGR1_AWDSGL; /* (1) */
+	ADC1->TR = (vrefint_high << 16) + vrefint_low; /* (2)*/
+	ADC1->IER = ADC_IER_AWDIE; /* (3) */  
+![](https://i.imgur.com/8ZPj1wf.png)  
+![](https://i.imgur.com/S3D4rzb.png)  
+![](https://i.imgur.com/ksZ2uwD.png)  
+##温度传感器和内部参考电压  
+温度传感器被用来测量器件的结点温度（T<sub>J</sub>）。温度传感器在内部连接到ADC_IN16输入通道，可以将传感器输出的电压转换成数值。采样时间必须大于最小的T<sub>S_temp</sub>（在数据手册中有说明）。不使用稳定传感器时，可以将其断电。  
+温度传感器的输出电压随温度线性变化，但是由于生产的差异每个器件是不同的。为了提高稳定传感器测量的准确度，在生产测试中ST会校准每一个器件，并将校准值存放在系统存储区。参考数据手册，可以了解更多信息。  
+内部参考电压V<sub>REFINT</sub>为ADC和比较器提供一个稳定的电压（带隙）输入。V<sub>REFINT</sub>在内部连接到ADC_IN17输入通道。在生产测试中ST会精确测量每一个器件的V<sub>REFINT</sub>电压，并存放到系统存储区（它只能被读取）。  
+![](https://i.imgur.com/bZ1XwJY.png)  
+TSEN必须置位使能ADC_IN16的转换（温度传感器），VREFEN必须置位使能ADC_IN17的转换（V<sub>REFINT</sub>）。  
+###主要特性  
+- 测量温度范围：-40到105℃  
+- 线性：最大±2℃，精度取决于校准  
+###读温度  
+- 选择通道ADC_IN16  
+- 根据数据手册的规定（T<sub>S_temp</sub>），选择合适的采样时间  
+- ADC_CCR的TSEN置1，将温度传感器从掉电模式唤醒，并待其稳定（t<sub>START</sub>）  
+- ADC_CR的ADSTART置1，启动转换  
+- 读取ADC_DR中的转换结果  
+- 根据下面的公式计算出温度值：  
+![](https://i.imgur.com/4qPRMrE.png)  
+其中:  
+- V<sub>30</sub> 为V<sub>SENSE</sub>30℃时的值，就是工厂存储在系统存储区的测量值  
+- Avg_Slope为V<sub>SENSE</sub>和温度曲线的平均斜率值(单位为mV/℃或μV/℃ )  
+######Temperature configuration code example  
+
+	/* (1) Select CHSEL16 for temperature sensor */
+	/* (2) Select a sampling mode of 111 i.e. 239.5 ADC clk to be greater than 17.1us */
+	/* (3) Wake-up the Temperature sensor (only for VBAT, Temp sensor and VRefInt) */
+	ADC1->CHSELR = ADC_CHSELR_CHSEL16; /* (1) */
+	ADC1->SMPR |= ADC_SMPR_SMP_0 | ADC_SMPR_SMP_1 | ADC_SMPR_SMP_2; /* (2) */
+	ADC->CCR |= ADC_CCR_TSEN; /* (3) */  
+######Temperature computation code example  
+
+	/* Temperature sensor calibration value address */
+	#define TEMP30_CAL_ADDR ((uint16_t*) ((uint32_t) 0x1FFFF7B8))
+	#define VDD_CALIB ((uint32_t) (3300))
+	#define VDD_APPLI ((uint32_t) (3000))
+	#define AVG_SLOPE ((uint32_t) (5336)) 
+	//AVG_SLOPE in ADC conversion step (@3.3V)/°C multiplied by 1000 for precision on the division
+	int32_t temperature; /* will contain the temperature in degrees Celsius */
+	temperature = ((uint32_t) *TEMP30_CAL_ADDR - ((uint32_t) ADC1->DR * VDD_APPLI / VDD_CALIB)) * 1000;
+	temperature = (temperature / AVG_SLOPE) + 30;  
+注意：温度传感器从断电唤醒后需要一段启动时间才能稳定输出V<sub>SENSE</sub>。ADC上电后也需要一定的启动时间，所以为了减少等待，ADEN和TSEN应该同时置位。  
+###使用内部参考电压计算实际的V<sub>DDA</sub>  
+用于微控制器的电源电压V<sub>DDA</sub>可能会变化或无法精确的获知。内部参考电压V<sub>REFINT</sub>及其校准值可以用于评估实际的V<sub>DDA</sub>电压。V<sub>REFINT</sub>的校准数据是在制造过程中在V<sub>DDA</sub>=3.3V时通过ADC测量得到。  
+计算公式如下：  
+<font size=5>V<sub>DDA</sub> = 3.3 V x VREFINT_CAL / VREFINT_DATA</font>  
+其中：  
+- VREFINT_CAL是V<sub>REFINT</sub>的校准值  
+- VREFINT_DATA是V<sub>REFINT</sub>输出经过ADC转换的值  
+###将电源相对ADC测量值转换为绝对电压值  
+ADC的设计是将模拟供电电源和转换通道上的输入电压之间的比率转换成相应的数值。对于多数应用，需要将这个比率转换成不依赖于V<sub>DDA</sub>的电压值。如果知道V<sub>DDA</sub>的值和ADC的转换结果（右对齐）可以使用下面公式计算出绝对值：  
+![](https://i.imgur.com/77nYsPp.png)  
+如果不知道V<sub>DDA</sub>的值，可以使用内部参考电压计算：  
+![](https://i.imgur.com/SrQTRoo.png)  
+其中：  
+- VREFINT_CAL是V<sub>REFINT</sub>的校准值  
+- ADC_DATA<sub>X</sub>是ADC测得通道X的值（右对齐）  
+- VREFINT_DATA是实际的V<sub>REFINT</sub>输出经过ADC转换的值  
+- FULL_SCALE是ADC输出的最大数值。例如，12位精度，FULL_SCALE=2<sup>12</sup>-1=4095；8位精度，FULL_SCALE=2<sup>8</sup>-1=255。  
+注意：如果ADC转换结果不是12位右对齐，必须先把它转换成正确的格式，才能用于公式计算。  
+##ADC中断  
+发生下面任意事件，都可能产生中断：  
+- ADC上电，当ADC准备好（ADRDY标志置位）  
+- 任一次转换结束（EOC标志置位）  
+- 一个序列转换结束（EOSEQ标志置位）  
+- 发生模拟看门狗监测事件（AWD标志置位）  
+- 采样结束（EOSMP标志置位）  
+- 发生溢出（OVR标志置位）  
+每个事件都有单独的中断使能位，可以灵活设置。  
+![](https://i.imgur.com/8cMrm8v.png)  
+##ADC寄存器  
+###ADC interrupt and status register(ADC_ISR)  
+![](https://i.imgur.com/go2NnA8.png)  
+![](https://i.imgur.com/jZBqmqx.png)  
