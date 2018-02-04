@@ -547,6 +547,41 @@ ADC的设计是将模拟供电电源和转换通道上的输入电压之间的�
 每个事件都有单独的中断使能位，可以灵活设置。  
 ![](https://i.imgur.com/8cMrm8v.png)  
 ##ADC寄存器  
-###ADC interrupt and status register(ADC_ISR)  
+###ADC interrupt and status register(ADC_ISR) ADC中断和状态寄存器  
 ![](https://i.imgur.com/go2NnA8.png)  
 ![](https://i.imgur.com/jZBqmqx.png)  
+###ADC interrupt enable register(ADC_IER) ADC中断使能寄存器  
+![](https://i.imgur.com/XpTk4Kg.png)  
+![](https://i.imgur.com/1QRzT5S.png)  
+![](https://i.imgur.com/3gK0uzf.png)  
+###ADC control register(ADC_CR) ADC控制寄存器  
+![](https://i.imgur.com/IX0up8L.png)  
+![](https://i.imgur.com/FcFkCe2.png)  
+![](https://i.imgur.com/RfLvaH8.png)  
+![](https://i.imgur.com/ApUBV6j.png)  
+###ADC configuration register 1(ADC_CFGR1) ADC配置寄存器1  
+![](https://i.imgur.com/N89UeD3.png)  
+![](https://i.imgur.com/i9HEAai.png)  
+![](https://i.imgur.com/62MX7mv.png)  
+![](https://i.imgur.com/UeQ6N2K.png)  
+![](https://i.imgur.com/zwSoyJe.png)  
+![](https://i.imgur.com/mczog26.png)  
+![](https://i.imgur.com/GfRfLQq.png)  
+###ADC configuration register 2(ADC_CFGR2) ADC配置寄存器2  
+![](https://i.imgur.com/MTV9LlF.png)  
+###ADC sampling time register(ADC_SMPR) ADC采样时间寄存器  
+![](https://i.imgur.com/wyrTFtd.png)  
+![](https://i.imgur.com/yrck7GG.png)  
+###ADC watchdog threshold register(ADC_TR) ADC看门狗阈值寄存器  
+![](https://i.imgur.com/tReabaO.png)  
+![](https://i.imgur.com/MmMhpfS.png)  
+###ADC channel selection register(ADC_CHSELR) ADC通道选择寄存器  
+![](https://i.imgur.com/kP22M9W.png)  
+###ADC data register(ADC_DR) ADC数据寄存器  
+![](https://i.imgur.com/dWbytfE.png)  
+###ADC common configuration register(ADC_CCR) ADC通用配置寄存器  
+![](https://i.imgur.com/9T1G3lR.png)  
+![](https://i.imgur.com/RZ7ecV4.png)  
+##ADC register map  
+![](https://i.imgur.com/MRz8aQK.png)  
+![](https://i.imgur.com/rFJ7mYg.png)  
