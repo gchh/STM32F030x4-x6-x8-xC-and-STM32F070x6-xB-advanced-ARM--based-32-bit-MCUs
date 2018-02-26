@@ -103,3 +103,90 @@ TIMx_CR1的UDIS位设置为1，可以禁止产生UEV更新事件。这样可以�
 在中心对齐模式，如果RCR的值是奇数，当RCR寄存器被写入并且计数器启动，在溢出或下溢时会发生更新事件。如果RCR在计数器启动前被写入，在溢出时发生UEV更新事件。如果RCR在计数器开始后被写入，在下溢时发生UEV更新事件。例如RCR=3，RCR被写入后，每4个溢出或下溢产生UEV更新事件。  
 ######Figure 60. Update rate examples depending on mode and TIMx_RCR register settings  
 ![](https://i.imgur.com/ud6mkbE.png)  
+###时钟源  
+计数器时钟可由以下时钟源分频得到：  
+- 内部时钟CK_INT  
+- 外部时钟模式1：外部输入引脚  
+- 外部时钟模式2：外部触发输入ETR  
+- 内部触发输入ITRx：使用一个定时器作为另一个定时器的预分频器，例如，可以配置Timer1作为Timer2的预分频器。  
+####内部时钟源CK_INT  
+如果禁止了从模式控制器(SMS=000)，则CEN，DIR(在TIMx_CR1寄存器中)和UG(在TIMx_EGR寄存器中)就是实际的控制位，并且只能被软件修改（除非UG被自动清零）。一旦CEN=1，内部时钟CK_INT就提供给预分频器作为时钟。  
+Figure61显示了不带预分频器时，控制电路和向上计数器在正常模式下的动作。  
+![](https://i.imgur.com/7XFKp5F.png)  
+####外部时钟源模式1  
+当TIMx_SMCR寄存器的SMS=111时，选择此模式。计数器在选定的输入引脚的每个上升沿或下降沿计数。  
+![](https://i.imgur.com/nuBmoQq.png)  
+例如，要配置向上计数器在TI2输入端的上升沿计数，步骤如下：  
+1. 写入TIMx_CCMR1寄存器的CC2S='01'，配置通道2检测TI2输入的上升沿  
+2. 写入TIMx_CCMR1寄存器的IC2F[3:0]，配置输入滤波器的带宽（如果不需要滤波器，保持IC2F=0000）  
+3. 写入TIMx_CCER寄存器的CC2P=0，选择上升沿  
+4. 写入TIMx_SMCR寄存器的SMS=111，配置定时器为外部时钟模式1  
+5. 写入TIMx_SMCR寄存器的TS=110，选择TI2作为触发器输入源  
+6. 写入TIMx_CR1寄存器的CEN=1，使能计数器   
+注：捕获预分频器不用作触发，所以不需要配置它。  
+######Upcounter on TI2 rising edge code example  
+
+	/* (1) Enable the peripheral clock of Timer 1 */
+	/* (2) Enable the peripheral clock of GPIOA */
+	/* (3) Select Alternate function mode (10) on GPIOA pin 9 */
+	/* (4) Select TIM1_CH2 on PA9 by enabling AF2 for pin 9 in GPIOA AFRH register */
+	RCC->APB2ENR |= RCC_APB2ENR_TIM1EN; /* (1) */
+	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; /* (2) */
+	GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODER9)) | (GPIO_MODER_MODER9_1); /* (3) */
+	GPIOA->AFR[1] |= 0x2 << ((9-8)*4); /* (4) */
+	/* (1) Configure channel 2 to detect rising edges on the TI2 input by
+	       writing CC2S = ‘01’, and configure the input filter duration by
+	       writing the IC2F[3:0] bits in the TIMx_CCMR1 register (if no filter
+	       is needed, keep IC2F=0000).*/
+	/* (2) Select rising edge polarity by writing CC2P=0 in the TIMx_CCER
+           register (reset value). */
+	/* (3) Configure the timer in external clock mode 1 by writing SMS=111
+	       Select TI2 as the trigger input source by writing TS=110
+	       in the TIMx_SMCR register.*/
+	/* (4) Enable the counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMx->CCMR1 |= TIM_CCMR1_IC2F_0 | TIM_CCMR1_IC2F_1 | TIM_CCMR1_CC2S_0; /* (1) */
+	TIMx->CCER &= (uint16_t)(~TIM_CCER_CC2P); /* (2) */
+	TIMx->SMCR |= TIM_SMCR_SMS | TIM_SMCR_TS_2 | TIM_SMCR_TS_1; /* (3) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (4) */  
+当TI2上出现上升沿时，计数器计一次数，且TIF标志置位。  
+在TI2上升沿和计数器实际时钟间的延时，取决于TI2输入端的重新同步电路。  
+![](https://i.imgur.com/3JjrWKu.png)  
+####外部时钟源模式2  
+当TIMx_SMCR寄存器的ECE=1时，选择此模式。计数器在外部触发输入ETR的每个上升沿或下降沿计数。  
+![](https://i.imgur.com/JEjMS92.png)  
+例如，要配置向上计数器在ETR的每2个上升沿计一次数，步骤如下：  
+1. 因为这个例子不需要滤波器，所以写入TIMx_SMCR寄存器的ETF[3:0]='0000'  
+2. 写入TIMx_SMCR寄存器的ETPS[1:0]='01'，设置预分频器  
+3. 写入TIMx_SMCR寄存器的ETP=0，选择检测上升沿  
+4. 写入TIMx_SMCR寄存器的ECE=1，使能外部时钟模式2  
+5. 写入TIMx_CR1寄存器的CEN=1,使能计数器  
+计数器将每2个ETR上升沿计数一次。  
+######Up counter on each 2 ETR rising edges code example  
+
+	/* (1) Enable the peripheral clock of Timer 1 */
+	/* (2) Enable the peripheral clock of GPIOA */
+	/* (3) Select Alternate function mode (10) on GPIOA pin 12 */
+	/* (4) Select TIM1_ETR on PA12 by enabling AF2 for pin 12 in GPIOA AFRH register */
+	RCC->APB2ENR |= RCC_APB2ENR_TIM1EN; /* (1) */
+	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; /* (2) */
+	GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODER12)) | (GPIO_MODER_MODER12_1); /* (3) */
+	GPIOA->AFR[1] |= 0x2 << ((12-8)*4); /* (4) */
+	/* (1) As no filter is needed in this example, write ETF[3:0]=0000
+	       in the TIMx_SMCR register. Keep the reset value.
+	       Set the prescaler by writing ETPS[1:0]=01 in the TIMx_SMCR register.
+	       Select rising edge detection on the ETR pin by writing ETP=0
+	       in the TIMx_SMCR register. Keep the reset value.
+	       Enable external clock mode 2 by writing ECE=1 in the TIMx_SMCR register. */
+	/* (2) Enable the counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMx->SMCR |= TIM_SMCR_ETPS_0 | TIM_SMCR_ECE; /* (1) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (2) */  
+在ETR上升沿和计数器实际时钟之间的延时，取决于ETRP信号的重新同步电路。  
+![](https://i.imgur.com/r4Hlrht.png)  
+###捕获/比较通道  
+每个捕获/比较通道包括一个捕获/比较寄存器（包含影子寄存器），一个捕获输入级（数字滤波器，多路复用和预分频器）和一个输出级（比较器和输出控制）。  
+输入级采样相应的TIx输入信号，产生一个滤波后的信号TIxF。然后，一个带极性选择的边沿检测器产生TIxFPx信号，它可以用作从模式控制器的触发输入或捕获控制。在输入到捕获寄存器前信号会被分频为ICxPS。  
+![](https://i.imgur.com/uVRrHOC.png)  
+输出级产生一个中间波形OCxRef(高有效)作为基准。链的末端决定最终输出信号的极性。  
+![](https://i.imgur.com/0vDPpKF.png)  
+![](https://i.imgur.com/DqdIQK6.png)  
+![](https://i.imgur.com/Fszvcbj.png)  
