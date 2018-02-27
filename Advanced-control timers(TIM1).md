@@ -305,4 +305,32 @@ TIMx_CCMRx寄存器的OCxM[2:0]=100，强制OCxREF为低电平。
 设置TIMx_CCMRx寄存器中的OCxPE位，可以选择TIMx_CCRx寄存器是否使用预装载寄存器。  
 在输出比较模式，更新事件UEV不影响OCxREF和OCx的输出。时间精度是计数器的一个计数周期。输出比较模式也可以用来输出一个单个脉冲（在单脉冲模式下）。  
 输出比较模式的配置步骤：  
-1. 
+1. 选择计数器的时钟（内部，外部，预分频器）。  
+2. 向TIMx_ARR和TIMx_CCRx写入要求的数据。  
+3. 如果要求产生中断，将CCxIE置1。  
+4. 选择输出模式。例如：  
+　- 设置OCxM[2:0]=011，当CNT=CCRx时，OCx输出电平翻转  
+　- 设置OCxPE=0，禁用预装载寄存器  
+　- 设置CCxP=0，选择高电平有效  
+　- 设置CCxE=1，使能输出  
+5. TIMx_CR1中的CEN=1，使能计数器。  
+######Output compare configuration code example  
+
+	/* (1) Set prescaler to 3, so APBCLK/4 i.e 12MHz */
+	/* (2) Set ARR = 12000 -1 */
+	/* (3) Set CCRx = ARR, as timer clock is 12MHz, an event occurs each 1 ms */
+	/* (4) Select toggle mode on OC1 (OC1M = 011),
+	       disable preload register on OC1 (OC1PE = 0, reset value) */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (6) Enable output (MOE = 1)*/
+	/* (7) Enable counter */
+	TIMx->PSC |= 3; /* (1) */
+	TIMx->ARR = 12000 - 1; /* (2) */
+	TIMx->CCR1 = 12000 - 1; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_0 | TIM_CCMR1_OC1M_1; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5)*/
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (7) */  
+TIMx_CCRx任何时候都可以通过软件更新以控制输出波形，前提是没有使用预装载寄存器（OCxPE=0，否则TIMx_CCRx影子寄存器只有在下次发生更新事件UEV时才被更新为新值）。  
+![](https://i.imgur.com/h6EOQgM.png)  
