@@ -194,3 +194,115 @@ Figure61显示了不带预分频器时，控制电路和向上计数器在正常
 在捕获模式，捕获实际发生在影子寄存器，然后再复制到预装载寄存器。  
 在比较模式，预装载寄存器的内容复制到影子寄存器，然后影子寄存器的内容和计数器进行比较。  
 ###输入捕获模式  
+在输入捕获模式下，当检测到相应的ICx信号边沿跳变，计数器的值被锁存到捕获/比较寄存器。当捕获发生时，TIMx_SR寄存器相应的CCxIF标志被置1；并且如果使能了中断或DMA，则将产生一个中断或DMA请求。如果在CCxIF=1时发生了捕获，TIMx_SR寄存器的捕获溢出标志CCxOF被置1。可以通过软件写CCxIF=0或读取存储在TIMx_CCRx寄存器的捕获数据，清除CCxIF标志。软件写CCxOF=0，清除CCxOF标志。  
+下面的例子说明如何在TI1输入的上升沿捕获计数器的值到TIMx_CCR1中，步骤如下：  
+- 选择有效的输入：写TIMx_CCMR1寄存器的CC1S=01，TIMx_CCR1链接到TI1输入。一旦CC1S≠00，通道就会被配置为输入，并且TIMx_CCR1寄存器只能读取。  
+- 根据输入到计数器的信号的要求，配置输入滤波器带宽（输入是TIx时，TIMx_CCMRx寄存器的ICxF[3:0]用于配置滤波器）。假设输入信号在跳变时，需要最多5个内部时钟周期才能稳定，那么我们必须将滤波器带宽设置长于5个时钟周期。我们可以配置TIMx_CCMR1寄存器的IC1F=0011，对TI1输入信号连续采样8次（以f<sub>DTS</sub>频率采样），检测到新电平，就可以确认一次跳变。  
+- 配置TIMx_CCER寄存器的CC1P=0和CC1NP=0，选择TI1通道上升沿有效。  
+- 配置输入预分频器。在本例中，我们希望在每次有效边沿执行捕获，所以禁止预分频器（TIMx_CCMR1寄存器的IC1PS[1:0]=00）。  
+- 写TIMx_CCER寄存器的CC1E=1，允许将计数器的值捕获到捕获寄存器TIMx_CCR1中。  
+- 如果需要，设置TIMx_DIER寄存器的CC1IE=1使能中断或CC1DE=1使能DMA请求。  
+######Input capture configuration code example  
+
+	/* (1) Select the active input TI1 (CC1S = 01),
+	       program the input filter for 8 clock cycles (IC1F = 0011),
+	       select the rising edge on CC1 (CC1P = 0, reset value)
+	       and prescaler at each valid transition (IC1PS = 00, reset value) */
+	/* (2) Enable capture by setting CC1E */
+	/* (3) Enable interrupt on Capture/Compare */
+	/* (4) Enable counter */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0 | TIM_CCMR1_IC1F_0 | TIM_CCMR1_IC1F_1; /* (1)*/
+	TIMx->CCER |= TIM_CCER_CC1E; /* (2) */
+	TIMx->DIER |= TIM_DIER_CC1IE; /* (3) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (4) */  
+当一个输入捕获发生：  
+- 在有效边沿，TIMx_CCR1获取计数器的值。  
+- 中断标志CC1IF=1。如果发生至少2个连续的捕获，而CC1IF=1未被清除，则CC1OF也会被置1。  
+- 如果CC1IE=1则会产生中断。  
+- 如果CC1DE=1则会产生DMA请求。  
+######Input capture data management code example  
+
+	//This code must be inserted in the Timer interrupt subroutine.
+	if ((TIMx->SR & TIM_SR_CC1IF) != 0)
+	{
+		if ((TIMx->SR & TIM_SR_CC1OF) != 0) /* Check the overflow */
+		{
+			/* Overflow error management */
+			gap = 0; /* Reinitialize the laps computing */
+			TIMx->SR &= ~(TIM_SR_CC1OF | TIM_SR_CC1IF); /* Clear the flags */
+			return;
+		}
+		if (gap == 0) /* Test if it is the first rising edge */
+		{
+			counter0 = TIMx->CCR1; /* Read the capture counter which clears the CC1IF */
+			gap = 1; /* Indicate that the first rising edge has yet been detected */
+		}
+		else
+		{
+			counter1 = TIMx->CCR1; /* Read the capture counter which clears the CC1IF */
+			if (counter1 > counter0) /* Check capture counter overflow */
+			{
+				Counter = counter1 - counter0;
+			}
+			else
+			{
+				Counter = counter1 + 0xFFFF - counter0 + 1;
+			}
+			counter0 = counter1;
+		}
+	}
+	else
+	{
+		/* Unexpected Interrupt */
+		/* Manage an error for robust application */
+	}  
+	/*此代码只是管理单个计数器溢出。要管理多个计数器溢出，必须使能更新中断（UIE=1），进行合适的管理*/  
+为了处理捕获溢出，建议在读取捕获溢出标志前先读出捕获数据，这是为了避免丢失在读取捕获溢出标志之后和在读取数据之前可能发生的捕获溢出。  
+注：通过软件设置TIMx_EGR寄存器中相应的CCxG位，也可以产生输入捕获中断和/或DMA请求。  
+###PWM输入模式  
+该模式是输入捕获模式的一个特例。除了下列区别，其他操作同输入捕获模式一样：  
+- 2个ICx信号被映射到同一个TIx输入。  
+- 这2个ICx信号的有效边沿极性相反。  
+- 2个TIxFP信号其中一个用作触发输入，而从模式控制器配置成复位模式。  
+例如，你可以测量TI1上的PWM信号的周期（TIMx_CCR1寄存器）和占空比（TIMx_CCR2寄存器），步骤如下（取决于CK_INT频率和预分频器值）：  
+- 选择TIMx_CCR1的有效输入：写TIMx_CCMR1的CC1S=01，选择TI1。  
+- 选择TI1FP1的有效极性（用来捕获数据到TIMx_CCR1和清除计数器）：写TIMx_CCER寄存器的CC1P=0和CC1NP=0，选择上升沿。  
+- 选择TIMx_CCR2的有效输入：写TIMx_CCMR1的CC2S=10，选择TI1。  
+- 选择TI1FP2的有效极性（用来捕获数据到TIMx_CCR2）：写TIMx_CCER寄存器的CC2P=1和CC2NP=0，选择下降沿。  
+- 选择有效的触发输入信号：写TIMx_SMCR寄存器的TS[2:0]=101，选择TI1FP1。  
+- 配置从模式控制器为复位模式：写TIMx_SMCR寄存器的SMS[2:0]=100。  
+- 使能捕获：写TIMx_CCER寄存器的CC1E=1和CC2E=1。  
+######PWM input configuration code example  
+
+	/* (1) Select the active input TI1 for TIMx_CCR1 (CC1S = 01),
+	       select the active input TI1 for TIMx_CCR2 (CC2S = 10) */
+	/* (2) Select TI1FP1 as valid trigger input (TS = 101)
+	       configure the slave mode in reset mode (SMS = 100) */
+	/* (3) Enable capture by setting CC1E and CC2E
+	       select the rising edge on CC1 and CC1N (CC1P = 0 and CC1NP = 0, reset value),
+	       select the falling edge on CC2 (CC2P = 1). */
+	/* (4) Enable interrupt on Capture/Compare 1 */
+	/* (5) Enable counter */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0 | TIM_CCMR1_CC2S_1; /* (1)*/
+	TIMx->SMCR |= TIM_SMCR_TS_2 | TIM_SMCR_TS_0 | TIM_SMCR_SMS_2; /* (2) */
+	TIMx->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC2P; /* (3) */
+	TIMx->DIER |= TIM_DIER_CC1IE; /* (4) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
+![](https://i.imgur.com/TfmjOV7.png)  
+###强制输出模式  
+在输出模式（TIMx_CCMRx寄存器的CCxS[1:0]=00），每个输出比较信号（OCxREF和相应的OCx/OCxN）能够由软件直接强制为有效或无效状态，而不依赖于输出比较寄存器和计数器的比较结果。  
+相应的TIMx_CCMRx寄存器写OCxM[2:0]=101，即可强制输出比较信号（OCxREF/OCx）为有效状态。这样OCxREF强制为高电平（OCxREF始终为高电平有效），而OCx得到和TIMx_CCER寄存器中CCxP极性相反的信号。  
+例如：设置CCxP=0(OCx高电平有效)=>OCx被强制为高电平。  
+TIMx_CCMRx寄存器的OCxM[2:0]=100，强制OCxREF为低电平。  
+在该模式下，TIMx_CCRx影子寄存器和计数器的比较依然会进行，相应的标志位也会置位。因此，中断和DMA请求仍然会产生。这将在下节的输出比较模式进行描述。  
+###输出比较模式  
+该功能可以用于控制输出波形或指示一段给定的时间已经结束。  
+当捕获/比较寄存器和计数器的内容相同时，输出比较功能做以下操作：  
+- 将输出比较模式（TIMx_CCMRx寄存器的OCxM[2:0]位）和输出极性（TIMx_CCER寄存器的CCxP位）定义的值输出到相应的引脚上。输出引脚保持它的电平（OCxM[2:0]=000），比较结果相同时设置为有效电平（OCxM[2:0]=001）或无效电平（OCxM[2:0]=010），抑或电平翻转（OCxM[2:0]=011）。  
+- 置位中断状态寄存器中的标志位（TIMx_SR中的CCxIF位）。  
+- 如果使能了相应的中断（TIMx_DIER中的CCxIE=1），则产生中断。  
+- 如果使能了相应的DMA（TIMx_DIER中的CCxDE=1，TIMx_CR2中的CCDS选择何时发送DMA请求），则发出DMA请求。  
+设置TIMx_CCMRx寄存器中的OCxPE位，可以选择TIMx_CCRx寄存器是否使用预装载寄存器。  
+在输出比较模式，更新事件UEV不影响OCxREF和OCx的输出。时间精度是计数器的一个计数周期。输出比较模式也可以用来输出一个单个脉冲（在单脉冲模式下）。  
+输出比较模式的配置步骤：  
+1. 
