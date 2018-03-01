@@ -405,3 +405,25 @@ OCx的极性可以通过软件设置TIMx_CCER寄存器的CCxP位选择高电平�
 ###互补输出和死区时间插入  
 高级控制定时器TIM1可以输出2个互补的信号，并控制输出瞬间的关断和接通。  
 输出关断的这段时间通常称为死区，你需要根据连接到输出上的器件和它们的特性（电平转换的延时，电源开关造成的延时等等）来调整死区时间。  
+配置TIMx_CCER寄存器的CCxP和CCxNP位，可以独立选择每一个输出的极性（主输出OCx或互补输出OCxN）。  
+互补信号OCx和OCxN由下列控制位组合控制：TIMx_CCER中的CCxE和CCxNE,TIMx_BDTR中的MOE和OSSI以及OSSR位,TIMx_CR2中的OISx和OISxN位。特别地，当转换到IDLE状态（MOE降为0）时，死区时间被激活。  
+同时置位CCxE和CCxNE位将插入死区时间，如果存在刹车电路还需要置位MOE。每个通道有一个10位的死区时间发生器，将参考信号OCxREF分成2路输出OCx和OCxN。如果OCx和OCxN设为高有效：  
+- OCx信号和参考信号相同，只是OCx的上升沿相对于OCxREF的上升沿有一定的延时。  
+- OCxN信号和参考信号相反，只是OCxN的上升沿相对于OCxREF的下降沿有一定的延时。  
+如果延时大于OCx或OCxN有效的输出宽度，则不会产生相应的脉冲。  
+下面的几张图显示了参考信号OCxREF和死区时间发生器2路输出信号间的关系。这些图例，假设CCxP=0,CCxNP=0,MOE=1,CCxE=1,CCxNE=1。  
+![](https://i.imgur.com/5mZwoTu.png)  
+每一个通道的死区延时时间是相同的，通过TIMx_BDTR寄存器的DTG[7:0]位设置。  
+####重定向OCxREF到OCx或OCxN  
+在输出模式（强制输出，输出比较或PWM输出），通过设置TIMx_CCER寄存器的CCxE和CCxNE位，OCxREF可以被重定向到OCx或OCxN。  
+这个功能允许在某个输出上输出一个特殊的波形（比如PWM或静态的有效电平），在这个输出的互补输出保持无效电平期间。其他作用如，让2个输出同时处于无效电平，或2个输出输出有效电平并且带死区互补输出。  
+注意：当只有OCxN使能（CCxE=0,CCxNE=1）时，它没有互补信号，并且一旦OCxREF是高电平它就立即变为有效电平（与CCxNP相反）。例如，如果CCxNP=0，则OCxN=OCxREF。另一方面，当OCx和OCxN都使能（CCxE=CCxNE=1）时，当OCxREF变为高电平时，OCx也变为有效电平；而OCxN相反，当OCxREF变为低电平时，OCxN变为有效电平。  
+###使用刹车功能  
+但使用刹车功能时，输出使能信号和无效电平可以根据相应的控制位（TIMx_BDTR中的MOE,OSSI和OSSR，TIMx_CR2中的OISx和OISxN）被修改。在任何情况下，OCx和OCxN输出不能在同一时刻都处于有效电平。  
+刹车源BRK既可以是连接在BKIN引脚上的外部信号，也可以是下列内部源之一：  
+- 内核LOCKUP输出  
+- PVD输出  
+- SRAM奇偶校验错误信号  
+- 时钟安全系统（CSS）监测器产生的时钟失败事件  
+- 比较器的输出  
+系统复位后，刹车电路被禁止，MOE=0。可以设置TIMx_BDTR寄存器中的BKE=1，使能刹车功能。设置TIMx_BDTR中的BKR，可以选择刹车输入信号的极性。BKE和BKP可以同时修改。当写BKE和BKP时，需要延时一个APB时钟周期，写入的数据才生效。因此，在写操作后，需要等待一个APB时钟周期才能正确读出写入的位。  
