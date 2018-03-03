@@ -441,4 +441,106 @@ OCx的极性可以通过软件设置TIMx_CCER寄存器的CCxP位选择高电平�
 刹车由极性可编程的BRK输入和TIMx_BDTR中的BKE使能位产生。  
 除了刹车输入和输出管理外，在刹车电路内部执行写保护以保护应用程序。它允许你冻结几个参数（死区时间长度，OCx/OCxN极性和禁止时的状态，OCxM，刹车使能和极性）的配置。可以通过配置TIMx_BDTR中的LOCK[1:0]选择3中保护等级中的一种。LOCK[1:0]只能在MCU复位后写入一次。  
 ![](https://i.imgur.com/xqvlb47.png)  
-###对外部事件清除OCxREF信号  
+###用外部事件清除OCxREF信号  
+当OCREF_CLR_INPUT是高电平（TIMx_CCMRx中的OCxCE=1），OCxREF将被置为低电平直到发生下一次更新事件UEV。该功能只能在输出比较模式和PWM模式使用，在强制模式不能使用。  
+根据TIMx_SMCR中的OCCS位，OCREF_CLR_INPUT在OCREF_CLR输入和ETRF(ETR经过滤波器后输出的信号)两者中选择其一。  
+如果选择ETRF，则ETR必须按如下配置：  
+ETRF为高电平时，给定通道的OCxREF信号被拉低（TIMx_CCMRx中的OCxCE=1）。OCxREF保持低电平直到下次更新事件UEV发生。  
+该功能只能在输出比较模式和PWM模式使用，在强制模式不能使用。  
+例如，OCxREF信号可以连接到一个比较器的输出，用作电流处理。此种情况，ETR必须如下配置：  
+- 外部触发预分频器必须关闭：TIMx_SMCR中的ETPS[1:0]=00。  
+- 禁止外部时钟模式2：TIMx_SMCR中的ECE=0。  
+- 外部触发极性ETP和外部触发滤波器ETF可以根据需要配置。  
+######ETR configuration to clear OCxREF code example  
+
+	/* This code is similar to the edge-aligned PWM configuration but it enables
+	   the clearing on OC1 for ETRclearing (OC1CE = 1) in CCMR1 (5) and ETR is
+	   configured in SMCR (7).*/
+	/* (1) Set prescaler to 47, so APBCLK/48 i.e 1MHz */
+	/* (2) Set ARR = 8, as timer clock is 1MHz the period is 9 us */
+	/* (3) Set CCRx = 4, , the signal will be high during 4 us */
+	/* (4) Select PWM mode 1 on OC1 (OC1M = 110),
+	       enable preload register on OC1 (OC1PE = 1),
+	       enable clearing on OC1 for ETR clearing (OC1CE = 1) */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1) */
+	/* (6) Enable output (MOE = 1) */
+	/* (7) Select ETR as OCREF clear source (OCCS = 1),
+	       select External Trigger Prescaler off (ETPS = 00, reset value),
+	       disable external clock mode 2 (ECE = 0, reset value),
+	       select active at high level (ETP = 0, reset value) */
+	/* (8) Enable counter (CEN = 1),
+	       select edge aligned mode (CMS = 00, reset value),
+	       select direction as upcounter (DIR = 0, reset value) */
+	/* (9) Force update generation (UG = 1) */
+	TIMx->PSC = 47; /* (1) */
+	TIMx->ARR = 8; /* (2) */
+	TIMx->CCR1 = 4; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1PE 
+                 | TIM_CCMR1_OC1CE; /* (4)*/
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->SMCR |= TIM_SMCR_OCCS; /* (7) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (8) */
+	TIMx->EGR |= TIM_EGR_UG; /* (9) */  
+图78显示了对应不同的OCxCE，当ETRF输入变高时，OCxREF的动作。在这个例子中，定时器TIMx处于PWM模式。  
+![](https://i.imgur.com/7i0rURX.png)  
+注意：对于100%PWM的情况（CCRx>ARR），OCxREF会在下一次计数器溢出时被再次使能。  
+###6步PWM生成  
+当一个通道使用互补输出时，预装载位有OCxM,CCxE和CCxNE。当发生COM换相事件时，这些预装载位写入影子寄存器相对应的位中。因此，你可以预先编写下一步的配置，并在同一时刻改变所有通道的配置。软件设置TIMx_EGR中的COM=1，或硬件上TRGI的上升沿，可以产生COM事件。  
+当COM事件发生时，TIMx_SR中的COMIF标志置位，如果TIMx_DIER中的COMIE=1，则会产生中断；或者TIMx_DIER中的COMDE=1，则会产生DMA请求。  
+图79显示了，在3种不同配置下，当发生COM事件时，OCx和OCxN的变化。  
+![](https://i.imgur.com/QDUEueg.png)  
+###单个脉冲模式  
+单脉冲模式OPM是前面众多模式的一个特例。此模式，计数器响应一个激励而启动，在一个可编程的延时之后，产生一个宽度可编程的脉冲。  
+计数器启动可以通过从模式控制器控制。可以在输出比较模式或PWM模式下产生波形。通过设置TIMx_CR1中的OPM=1，选择单脉冲模式。这样，计数器将在下个更新事件UEV发生时，自动停止。  
+只有当比较值和计数器初始值不同时，才能产生一个脉冲。在计数器启动前（等待触发时），配置必须满足：  
+- 向上计数时：CNT<CCRx≤ARR（特别地，0<CCRx）。  
+- 向下计数时：CNT>CCRx  
+![](https://i.imgur.com/Gu0lWF9.png)  
+例如，你需要，在TI2输入引脚上检测到一个上升沿时，经过t<sub>DELAY</sub>延时后，在OC1上输出一个长度t<sub>PULSE</sub>的正脉冲。  
+假定使用TI2FP2作为触发1：  
+- 设置TIMx_CCMR1中的CC2S[1:0]=01，将TI2FP2映射到TI2  
+- 设置TIMx_CCER中的CC2P=0和CC2NP=0，使TI2FP2检测上升沿  
+- 设置TIMx_SMCR中的TS[2:0]=110，配置TI2FP2作为从模式控制器的触发输入TRGI  
+- 设置TIMx_SMCR中的SMS[2:0]=110，选择触发模式，TRGI的上升沿启动计数器计数；即TI2FP2的上升沿启动计数。  
+OPM的波形由比较寄存器的值决定（要考虑时钟频率和计数器预分频器）：  
+- TIMx_CCR1寄存器的值决定了t<sub>DELAY</sub>的长短。  
+- t<sub>PULSE</sub>=(TIMx_ARR-TIMx_CCR+1)。  
+- 假定你想要当CNT=TIMx_CCR时，波形从0变为1；当CNT=TIMx_ARR时，波形从1变为0。为此，你需要设置TIMx_CCMR1寄存器的OC1M[2:0]=111，选择PWM模式2。可以随意设置TIMx_CCMR1中的OC1PE=1或TIMx_CR1中的ARPE=1，使能预装载寄存器。向TIMx_CCR1写入比较值，向TIMx_ARR写入自动重载值，然后将TIMx_EGR中的UG=1产生一个更新事件，然后等待TI2上的外部触发事件。本例中，CC1P=0。  
+在我们的举例中，TIMx_CR1中的DIR=0，CMS[1:0]=00。  
+######One-Pulse mode code example  
+
+	/* The OPM waveform is defined by writing the compare registers */
+	/* (1) Set prescaler to 47, so APBCLK/48 i.e 1MHz */
+	/* (2) Set ARR = 7, as timer clock is 1MHz the period is 8 us */
+	/* (3) Set CCRx = 5, the burst will be delayed for 5 us (must be > 0) */
+	/* (4) Select PWM mode 2 on OC1 (OC1M = 111),
+	       enable preload register on OC1 (OC1PE = 1, reset value)
+	       enable fast enable (no delay) if PULSE_WITHOUT_DELAY is set */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1) */
+	/* (6) Enable output (MOE = 1) */
+	/* (7) Write '1 in the OPM bit in the TIMx_CR1 register to stop the counter
+	       at the next update event (OPM = 1),
+	       enable auto-reload register(ARPE = 1) */
+	TIMx->PSC = 47; /* (1) */
+	TIMx->ARR = 7; /* (2) */
+	TIMx->CCR1 = 5; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_0
+	             | TIM_CCMR1_OC1PE
+	#if PULSE_WITHOUT_DELAY > 0
+	             | TIM_CCMR1_OC1FE
+	#endif
+	             ; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_OPM | TIM_CR1_ARPE; /* (7) */  
+你只想要1个脉冲，所以TIMx_CR1的OPM需要置1，以在下个更新事件发生时（当计数器从自动装载值翻转到0时，即溢出）停止计数器。当TIMx_CR1中的OPM=0，选择重复模式。  
+####特殊情况：OCx快速使能  
+在单脉冲模式，TIx的边沿检测电路置位CEN启动计数器计数。计数器和比较值间的比较结果促使输出跳变。但是这些操作需要一些时钟周期去完成，所以这限制了我们能得到的最小t<sub>DELAY</sub>延时。  
+如果你想以最小的延时输出波形，可以设置TIMx_CCMRx中的OCxFE=1。此时，OCxREF（以及OCx）被强制直接响应激励，而不考虑比较结果如何；输出的波形和比较匹配时输出的波形一样。OCxFE只有在通道配置成PWM模式1或PWM模式2时，才起作用。  
+###编码器接口模式  
+如果计数器只在TI2边沿计数，则设置TIMx_SMCR中的SMS[2:0]=001选择编码器接口模式。如果计数器只在TI1边沿计数，则设置TIMx_SMCR中的SMS[2:0]=010选择编码器接口模式。如果计数器在TI1和TI2的边沿都计数，则设置TIMx_SMCR中的SMS[2:0]=011选择编码器接口模式。  
+设置TIMx_CCER寄存器中的CC1P和CC2P，选择TI1和TI2的极性。需要时，还可以配置输入滤波器。CC1NP和CC2NP必须保持为0。  
+TI1和TI2两个输入作为增量编码器的接口。
