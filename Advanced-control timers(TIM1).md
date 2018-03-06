@@ -713,3 +713,8 @@ TIM定时器在内部是相连的，用于定时器同步或链接。参考Gener
 ![](https://i.imgur.com/o4uHyAK.png)  
 ![](https://i.imgur.com/phu5Eox.png)  
 ![](https://i.imgur.com/BCn5f1F.png)  
+###TIM1控制寄存器2（TIM1_CR2）  
+![](https://i.imgur.com/yvwkxoh.png)  
+![](https://i.imgur.com/qkV6jy3.png)  
+![](https://i.imgur.com/LybN2MQ.png)  
+###TIM1从模式控制寄存器（TIM1_SMCR）  
