@@ -778,3 +778,24 @@ TIM定时器在内部是相连的，用于定时器同步或链接。参考Gener
 ![](https://i.imgur.com/a1yJfMm.png)  
 ![](https://i.imgur.com/0ZRUA2T.png)  
 ![](https://i.imgur.com/1Usctov.png)  
+###TIM1 DMA控制寄存器（TIM1_DCR）  
+![](https://i.imgur.com/iBult1L.png)  
+###TIM1 为了全部传输的DMA地址（TIM1_DMAR）  
+![](https://i.imgur.com/KeyH7RM.png)  
+####如何使用DMA并发特性的例子  
+在本例中，使用定时器的DMA并发特性来更新CCRx(x=2,3,4)寄存器的内容，通过DMA半字传输到CCRx寄存器。  
+按如下步骤操作：  
+1. 配置相应的DMA通道，如下：  
+　- DMA通道的外设地址是TIM1_DMAR寄存器的地址  
+　- DMA通道的内存地址是在RAM中包含有要通过DMA传送到CCRx寄存器的数据的缓冲区的地址  
+　- 传输数据的数量=3（见下面的注意）  
+　- 禁止循环模式  
+2. 配置TIM1_DCR中的DBA和DBL，如下：DBL=3此传输，DBA=0xE  
+3. 使能TIM1更新产生DMA请求（设置TIM1_DIER中的UDE=1）  
+4. 使能TIM1  
+5. 使能DMA通道  
+注意：在本例中，每个CCRx更新一次。如果每个CCRx需要更新2次，传输数据的数量需要改成6；在RAM中的缓冲区要包含data1,data2,data3,data4,data5和data6。数据传输到CCRx中的过程如下：第一个更新DMA请求时，data1传输到CCx2，data2传输到CCx3，data3传输到CCx4；第二个更新DMA请求时，data4传输到CCx2，data5传输到CCx3，data6传输到CCx4。  
+##TIM1寄存器映射  
+![](https://i.imgur.com/6Tcz9xo.png)  
+![](https://i.imgur.com/2ZoRPW2.png)  
+![](https://i.imgur.com/0w4VZHU.png)  
