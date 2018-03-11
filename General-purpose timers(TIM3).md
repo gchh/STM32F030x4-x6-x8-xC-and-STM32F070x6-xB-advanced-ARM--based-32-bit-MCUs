@@ -144,7 +144,82 @@
 从ETR出现上升沿到产生计数器时钟之间的延时，取决于ETRP信号端的重新同步电路。  
 ![](https://i.imgur.com/23FYbkP.png)  
 ###捕获/比较通道  
-每个捕获/比较通道都是建立在一个捕获/比较寄存器（包含一个影子寄存器），一个捕获输入级（带有数字滤波器，多路复用和预分频器），以及一个比较输出级（带有比较器和输出控制）。  
+每个捕获/比较通道都是基于一个捕获/比较寄存器（包含一个影子寄存器），一个捕获输入级（带有数字滤波器，多路复用和预分频器），以及一个比较输出级（带有比较器和输出控制）。  
 下面的图给出了一个捕获/比较通道的概览。  
 输入级对相应的TIx输入进行采样然后产生滤波后的信号TIxF。然后，通过一个带极性选择的边沿检测器后产生信号TIxFPx，它可以作为从模式控制器的触发输入，或者作为捕获控制。TIxFPx经过预分频器产生信号ICxPS，传输到捕获寄存器。  
 ![](https://i.imgur.com/905L1JK.png)  
+输出级产生一个中间波形用作参考：OCxRef(高电平有效)。输出级末端控制输出极性。  
+![](https://i.imgur.com/8oWkxiU.png)  
+![](https://i.imgur.com/Qm0oWks.png)  
+捕获/比较模块由一个预装载寄存器和它的影子寄存器组成。读写操作仅对预装载寄存器进行。  
+在捕获模式，实际是影子寄存器捕获计数器值，然后再拷贝到预装载寄存器。  
+在比较模式，预装载寄存器的值拷贝到影子寄存器，然后影子寄存器与计数器比较。  
+###输入捕获模式  
+在输入捕获模式，在ICx信号上检测到相应的边沿后，捕获/比较寄存器TIMx_CCRx锁存住计数器的值。当发生捕获，TIMx_SR中的CCxIF标志置位，并且产生中断或DMA请求如果它们使能的话。如果当CCxIF=1时，再次发生捕获，那么捕获溢出标志TIMx_SR中的CCxOF置位。CCxIF可以通过软件向其写0或读取TIMx_CCRx寄存器中储存的捕获值，清零。CCxOF需要软件向其写0，清除。  
+下面的例子介绍当TI1输入上升沿时TIMx_CCR1如何捕获计数器的值。要实现此目的，需要遵循下面的步骤：  
+- 选择有效的输入：TIMx_CCR1必须链接到TI1输入上，因此要设置TIMx_CCMR1中的CC1S=01。一旦CC1S≠00，该通道就配置成输入了，并且TIMx_CCR1寄存器也变为只读。  
+- 根据输入信号，配置输入滤波器带宽（如果输入是TIx，则配置TIMx_CCMRx寄存器中的ICxF）。设想，当跳变是，输入信号在5个内部时钟周期内会抖动；那么我们必须设置滤波器带宽长于5时钟周期。我们可以配置TIMx_CCMR1寄存器中的IC1F=0011，以f<sub>CK_INT</sub>为采样频率，连续采样8次，如果8次采样结果一致且是新的电平，则可以确认TI1上信号发生跳变。  
+- 选择TI1通道上的有效的跳变边沿：设置TIMx_CCER寄存器中的CC1P=0且CC1NP=0，选择上升沿。  
+- 配置输入预分频器。在本例中，我们希望在每一个有效边沿都进行捕获，因此不需要分频，保持TIMx_CCMR1寄存器中的IC1PS=00。  
+- 使能捕获计数器值到捕获寄存器：设置TIMx_CCER寄存器中的CC1E=1。  
+- 如果需要，设置TIMx_DIER寄存器中的CC1IE=1，使能中断；和/或TIMx_DIER中的CC1DE=1，使能DMA请求。  
+######nput capture configuration code example  
+
+	/* (1) Select the active input TI1 (CC1S = 01),
+	       program the input filter for 8 clock cycles (IC1F = 0011),
+	       select the rising edge on CC1 (CC1P = 0, reset value)
+	       and prescaler at each valid transition (IC1PS = 00, reset value) */
+	/* (2) Enable capture by setting CC1E */
+	/* (3) Enable interrupt on Capture/Compare */
+	/* (4) Enable counter */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0 | TIM_CCMR1_IC1F_0 | TIM_CCMR1_IC1F_1; /* (1)*/
+	TIMx->CCER |= TIM_CCER_CC1E; /* (2) */
+	TIMx->DIER |= TIM_DIER_CC1IE; /* (3) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (4) */  
+当发生输入捕获时：  
+- TIMx_CCR1获取计数器值。  
+- CC1IF=1。如果连续发生至少2次捕获且CC1IF=1，则CC1OF=1。  
+- 根据CC1IE的设置，决定是否产生中断。  
+- 根据CC1DE的设置，决定是否发出DMA请求。  
+######Input capture data management code example  
+
+	/* This code must be inserted in the Timer interrupt subroutine. */
+	if ((TIMx->SR & TIM_SR_CC1IF) != 0)
+	{
+		if ((TIMx->SR & TIM_SR_CC1OF) != 0) /* Check the overflow */
+		{
+			/* Overflow error management */
+			gap = 0; /* Reinitialize the laps computing */
+			TIMx->SR &= ~(TIM_SR_CC1OF | TIM_SR_CC1IF); /* Clear the flags */
+			return;
+		}
+		if (gap == 0) /* Test if it is the first rising edge */
+		{
+			counter0 = TIMx->CCR1; /* Read the capture counter which clears the CC1ICF */
+			gap = 1; /* Indicate that the first rising edge has yet been detected */
+		}
+		else
+		{
+			counter1 = TIMx->CCR1; /* Read the capture counter which clears the CC1ICF */
+			if (counter1 > counter0) /* Check capture counter overflow */
+			{
+				Counter = counter1 - counter0;
+			}
+			else
+			{
+				Counter = counter1 + 0xFFFF - counter0 + 1;
+			}
+			counter0 = counter1;
+		}
+	}
+	else
+	{
+		/* Unexpected Interrupt */
+		/* Manage an error for robust application */
+	}  
+	/* Note: This code manages only a single counter overflow. 
+    To manage many counter overflows the update interrupt must be enabled
+    (UIE = 1) and properly managed. */  
+为了除了捕获溢出，建议在读取捕获溢出标志之前读取捕获数据。这是为了避免，在读取捕获溢出标志之后而在读取捕获数据之前的这段时间内，又发生捕获，而造成前次捕获数据丢失。  
+注：输入捕获中断和/或DMA请求，可以通过软件设置TIMx_EGR中的CCxG=1，产生。  
+###PWM输入模式  
