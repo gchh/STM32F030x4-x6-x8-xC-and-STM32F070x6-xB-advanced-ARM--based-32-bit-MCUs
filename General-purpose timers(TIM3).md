@@ -223,3 +223,78 @@
 为了除了捕获溢出，建议在读取捕获溢出标志之前读取捕获数据。这是为了避免，在读取捕获溢出标志之后而在读取捕获数据之前的这段时间内，又发生捕获，而造成前次捕获数据丢失。  
 注：输入捕获中断和/或DMA请求，可以通过软件设置TIMx_EGR中的CCxG=1，产生。  
 ###PWM输入模式  
+该模式是一种特殊的输入捕获模式。和输入捕获模式的差别是：  
+- 有2个ICx信号被映射到同一个TIx输入上。  
+- 这2个ICx的有效边沿极性相反。  
+- 2个TIxFP信号其中一个选作触发器输入TRGI，并且从模式控制器配置成复位模式。  
+举例，测量TI1上的PWM信号的周期（使用TIMx_CCR1）和占空比（使用TIMx_CCR2），步骤如下（取决于CK_INT的频率和预分频器的值）：  
+- 为TIMx_CCR1选择有效输入：设置TIMx_CCMR1中的CC1S=01，选择TI1。  
+- 为TI1FP1选择有效极性（用于捕获数据到TIMx_CCR1和计数器清零）：设置TIMx_CCER中的CC1P=0以及CC1NP=0，选择上升沿有效。  
+- 为TIMx_CCR2选择有效输入：设置TIMx_CCMR1中的CC2S=10，选择TI1。  
+- 为TI1FP2选择有效极性（用于捕获数据到TIMx_CCR2）：设置TIMx_CCER中的CC2P=1以及CC2NP=0，选择下降沿有效。  
+- 选择有效的触发器输入TRGI：设置TIMx_SMCR中的TS=101，选择TI1FP1。  
+- 配置从模式控制器为复位模式：设置TIMx_SMCR中的SMS=100。  
+- 使能捕获：设置TIMx_CCER中的CC1E=1以及CC2E=1。  
+######PWM input configuration code example  
+
+	/* (1) Select the active input TI1 for TIMx_CCR1 (CC1S = 01),
+	       select the active input TI1 for TIMx_CCR2 (CC2S = 10) */
+	/* (2) Select TI1FP1 as valid trigger input (TS = 101)
+	       configure the slave mode in reset mode (SMS = 100) */
+	/* (3) Enable capture by setting CC1E and CC2E
+	       select the rising edge on CC1 and CC1N (CC1P = 0 and CC1NP = 0, reset value),
+	       select the falling edge on CC2 (CC2P = 1). */
+	/* (4) Enable interrupt on Capture/Compare 1 */
+	/* (5) Enable counter */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0 | TIM_CCMR1_CC2S_1; /* (1)*/
+	TIMx->SMCR |= TIM_SMCR_TS_2 | TIM_SMCR_TS_0 | TIM_SMCR_SMS_2; /* (2) */
+	TIMx->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC2P; /* (3) */
+	TIMx->DIER |= TIM_DIER_CC1IE; /* (4) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
+![](https://i.imgur.com/MTWgyS5.png)  
+###强制输出模式  
+在输出模式（TIMx_CCMRx中的CCxS=00），每一个输出比较信号（OCxREF和OCx）可以直接由软件强置为有效或无效电平，而不依赖输出比较寄存器和计数器的比较结果。  
+要强制比较输出信号（OCxREF和OCx）为有效电平，只需设置TIMx_CCMRx中的OCxM=101，这样OCxREF就被强制为高电平（OCxREF的有效电平总是高电平），而OCx的电平和TIMx_CCER中的CCxP的设置相反。  
+例如：CCxP=0（OCx高电平有效）=> OCx被强制为高电平。  
+OCxREF可以强制为低电平（无效电平），通过设置TIMx_CCMRx中的OCxM=100。  
+然而，在该模式下，TIMx_CCRx和计数器的比较依然会进行，相应的标志位也会置位。因此，同样可以产生中断和DMA请求。  
+###比较输出模式  
+此功能可以用于控制输出波形，或指出设定的一段时间已经到时了。  
+当捕获/比较寄存器和计数器2者值相等时，比较输出功能：  
+- 相应的输出引脚输出配置的电平，该电平由设置的比较输出模式（设置TIMx_CCMRx中的OCxM来选择）和设置的输出极性（设置TIMx_CCER中的CCxP来选择）决定。如果OCxM=000，则输出引脚保持当前输出，比较结果不会影响它；OCxM=001，则输出引脚输出有效电平；OCxM=010，则输出引脚输出无效电平；OCxM=011，则输出引脚输出发生反转。  
+- TIMx_SR中的中断标志位CCxIF置位。  
+- 如果TIMx_DIER中的CCxIE=1，则产生中断。  
+- 如果TIMx_DIER中的CCxDE=1，TIMx_CR2中的CCDS=0，则发出DMA请求。  
+TIMx_CCRx由TIMx_CCMRx中的OCxPE设置是否使用预装载寄存器。  
+在比较输出模式，更新事件UEV不会影响OCxREF和OCx输出。  
+计时分辨率是计数器的一个计数。比较输出模式也可以用于输出一个单独脉冲（单脉冲模式）。  
+比较输出模式配置步骤：  
+- 选择计数器时钟（内部，外部，预分频器）。  
+- 向TIMx_ARR和TIMx_CCRx写入期望的数据。  
+- 如果需要中断和/或DMA请求，置位TIMx_DIER中的CCxIE和/或CCxDE。  
+- 选择输出模式。例如，设置OCxM=011,OCxPE=0,CCxP=0和CCxE=1，即是当CNT和CCRx相等时OCx输出反转，并且CCRx不使用预装载寄存器，OCx输出使能并且高电平有效。  
+- 使能计数器，设置TIMx_CR1中的CEN=1。  
+######Output compare configuration code example  
+
+	/* (1) Set prescaler to 3, so APBCLK/4 i.e 12MHz */
+	/* (2) Set ARR = 12000 -1 */
+	/* (3) Set CCRx = ARR, as timer clock is 12MHz, an event occurs each 1 ms */
+	/* (4) Select toggle mode on OC1 (OC1M = 011),
+	       disable preload register on OC1 (OC1PE = 0, reset value) */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (6) Enable output (MOE = 1)*/
+	/* (7) Enable counter */
+	TIMx->PSC |= 3; /* (1) */
+	TIMx->ARR = 12000 - 1; /* (2) */
+	TIMx->CCR1 = 12000 - 1; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_0 | TIM_CCMR1_OC1M_1; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5)*/
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (7) */  
+TIMx_CCRx寄存器可以任何时候被改变以控制输出波形，前提是没有使用预装载寄存器（OCxPE=0），否则，发生更新事件UEV时TIMx_CCRx的影子寄存器才被更新为新的值。  
+下图是不使用预装载寄存器时，改变TIMx_CCRx的值，发生的情况。  
+![](https://i.imgur.com/BOdErOj.png)  
+###PWM输出模式  
+PWM模式允许你通过配置TIMx_ARR确定频率，TIMx_CCRx确定占空比，产生一个PWM信号。  
+每个通道可以独立设置为PWM模式（每个OCx输出一路PWM信号）。当TIMx_CCMRx中的OCxM=110，选择PWM模式1；OCxM=111，选择PWM模式2。设置TIMx_CCMRx中的OCxPE=1，使能TIMx_CCRx的预装载寄存器；并且设置TIMx_CR1中的ARPE=1，使能自动重载预装载寄存器（在向上计数或中心对齐计数模式下）。  
