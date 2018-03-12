@@ -298,3 +298,55 @@ TIMx_CCRx寄存器可以任何时候被改变以控制输出波形，前提是�
 ###PWM输出模式  
 PWM模式允许你通过配置TIMx_ARR确定频率，TIMx_CCRx确定占空比，产生一个PWM信号。  
 每个通道可以独立设置为PWM模式（每个OCx输出一路PWM信号）。当TIMx_CCMRx中的OCxM=110，选择PWM模式1；OCxM=111，选择PWM模式2。设置TIMx_CCMRx中的OCxPE=1，使能TIMx_CCRx的预装载寄存器；并且设置TIMx_CR1中的ARPE=1，使能自动重载预装载寄存器（在向上计数或中心对齐计数模式下）。  
+因为预装载寄存器的值只有在发生更新事件时才被传送到影子寄存器中，所以在开始计数前，需要设置TIMx_EGR中的UG=1产生更新事件，初始化所有寄存器。  
+OCx的极性是软件设置TIMx_CCER中的CCxP位来选择，可以设置为高电平有效或低电平有效。设置TIMx_CCER中的CCxE=1，使能OCx输出。  
+在PWM模式1或模式2，TIMx_CNT和TIMx_CCRx始终在进行比较，确定是否TIMx_CNT≥TIMx_CCRx或TIMx_CNT≤TIMx_CCRx（取决于计数方向）。然而，为了顺应OCREF_CLR功能（OCxREF可以被外部事件通过ETR清除，直到下个PWM周期），OCxREF信号只在下列情况发生：  
+- 当比较结果改变时，或  
+- 当比较输出模式（TIMx_CCMRx中的OCxM位）从“冻结”（OCxM=000）切换到PWM模式（OCxM=110或111）。  
+这样，在定时器运行时，可以通过软件强制PWM输出。  
+设置TIMx_CR1中的CMS，可以选择边沿对齐PWM模式或中心对齐PWM模式。  
+####PWM边沿对齐模式  
+#####向上计数配置  
+TIMx_CR1中的DIR=0，计数器向上计数。  
+在下面的例子中，我们配置为PWM模式1。当TIMx_CNT＜TIMx_CCRx时，参考PWM信号OCxREF是有效电平（即高电平）；否则，为无效的低电平。如果TIMx_CCRx＞TIMx_ARR，那么TIMx_CNT总是小于TIMx_CCRx，所以OCxREF会一直为高电平。如果TIMx_CCRx=0，那么TIMx_CNT不会小于TIMx_CCRx，所以OCxREF会一直为低电平。  
+图118显示了，当TIMx_ARR=8时，一段边沿对齐的PWM波形。  
+######Edge-aligned PWM configuration example  
+
+	/* (1) Set prescaler to 47, so APBCLK/48 i.e 1MHz */
+	/* (2) Set ARR = 8, as timer clock is 1MHz the period is 9 us */
+	/* (3) Set CCRx = 4, , the signal will be high during 4 us */
+	/* (4) Select PWM mode 1 on OC1 (OC1M = 110),
+	       enable preload register on OC1 (OC1PE = 1) */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (6) Enable output (MOE = 1)*/
+	/* (7) Enable counter (CEN = 1)
+	       select edge aligned mode (CMS = 00, reset value)
+	       select direction as upcounter (DIR = 0, reset value) */
+	/* (8) Force update generation (UG = 1) */
+	TIMx->PSC = 47; /* (1) */
+	TIMx->ARR = 8; /* (2) */
+	TIMx->CCR1 = 4; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1PE; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (7) */
+	TIMx->EGR |= TIM_EGR_UG; /* (8) */  
+![](https://i.imgur.com/LJNhoME.png)  
+#####向下计数配置  
+TIMx_CR1中的DIR=1，计数器向下计数。  
+在PWM模式1下，当TIMx_CNT≤TIMx_CCRx时，OCxREF是有效的高电平；否则，是无效的低电平。如果TIMx_CCRx≥TIMx_ARR，那么TIMx_CNT永远不会大于TIMx_CCRx，所以OCxREF会一直为高电平。但是，当TIMx_CCRx=0时，因为TIMx_CNT可以为0，所以OCxREF不会一直是低电平。  
+####PWM中心对齐模式  
+TIMx_CR1中的CMS≠00时，计数器按中心对齐模式计数。不管哪种中心对齐模式，对于OCxREF/OCx信号的影响是一样的。  
+CCxIF在向上计数或向下计数，或是两者时置位，取决于CMS配置为哪种中心对齐模式。  
+TIMx_CR1中的DIR只可读，其由硬件根据计数器计数方向更新。  
+图119显示了，一段中心对齐PWM波形，当：  
+- TIMx_ARR=8  
+- PWM模式1  
+- TIMx_CR1中的CMS=01，选择中心对齐模式1，当计数器向下计数过程中发生比较匹配时，CCxIF置位  
+中心对齐模式的使用提示：  
+- 当开始进入中心对齐模式时，计数器按当前DIR的值指示的方向继续计数。而且，DIR和CMS不能同时被软件修改。  
+- 当计数器运行在中心对齐模式中时，不建议修改计数器的值，因为这可能导致意外的结果。特别是：  
+　- 如果写入计数器的值大于自动重载值，即TIMx_CNT＞TIMx_ARR，但是，DIR不会更新。如果，此时计数器是向上计数，它会计数向上计数。  
+　- 如果将0或TIMx_ARR的值写入计数器，DIR会更新，但是不会产生更新事件UEV。  
+- 使用中心对齐模式安全的方法是：在启动计数器之前，软件设置TIMx_EGR中的UG=1，产生一个更新事件，初始化所有寄存器，并且在计数过程中不修改计数器的值。  
