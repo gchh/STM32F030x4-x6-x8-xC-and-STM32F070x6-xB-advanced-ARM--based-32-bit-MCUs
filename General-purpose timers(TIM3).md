@@ -523,3 +523,76 @@ TIMx定时器可以和外部触发以下列模式实现同步：复位模式，�
                 | TIM_SMCR_TS_2 | TIM_SMCR_TS_0; /* (3) */
 	TIMx->PSC = 11999; /* (4) */
 	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
+当TI1为低电平时，计数器根据内部时钟开始计数；当TI1变为高电平，计数器就停止。当计数器开始或停止计数时，TIMx_SR中的TIF标志都会被置位。  
+从TI1出现上升沿到实际计数器停止计数之间的延时是由TI1输入上的重新同步电路造成的。  
+![](https://i.imgur.com/MwhJg3V.png)  
+####从模式：触发模式  
+所选输入上发生的某一事件启动计数器。  
+在下面的例子中，当TI2输入上出现上升沿时，向上计数器开始计数：  
+- 配置通道2检测TI2上升沿。配置输入滤波器带宽（在本例中，不需要滤波器，所以保持IC2F=0000）。捕获预分频器不用于触发操作，所以不需要配置它。设置TIMx_CCMR1中额CC2S=01，选择TI2作为输入捕获源。向TIMx_CCER中写入CC2P=0,CC2NP=0，以确定极性（只检测上升沿）。  
+- 向TIMx_SMCR写入SMS=110，配置定时器为触发模式。设置TIMx_SMCR中的TS=110，选择TI2作为输入源。  
+######Trigger mode code example  
+
+	/* (1) Configure channel 2 to detect rising edge on the TI2 input
+	       by writing CC2S = ‘01’,
+	       and configure the input filter duration by writing the IC1F[3:0]bits
+           in the TIMx_CCMR1 register (if no filter is needed, keep IC1F=0000). */
+	/* (2) Select polarity by writing CC2P=0 (reset value) in the TIMx_CCER register */
+	/* (3) Configure the timer in trigger mode by writing SMS=110
+	       Select TI2 as the trigger input source by writing TS=110
+	       in the TIMx_SMCR register. */
+	/* (4) Set prescaler to 12000-1 in order to get an increment each 250us */
+	TIMx->CCMR1 |= TIM_CCMR1_CC2S_0; /* (1)*/
+	TIMx->CCER &= ~TIM_CCER_CC2P; /* (2) */
+	TIMx->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1
+	            | TIM_SMCR_TS_2 | TIM_SMCR_TS_1; /* (3) */
+	TIM1->PSC = 11999; /* (4) */  
+当TI2上出现上升沿，计数器根据内部时钟开始开始计数，并且TIF被置1。  
+TI2上出现上升沿到实际计数器开始计数之间的延迟是TI2输入上的重新同步电路造成的。  
+![](https://i.imgur.com/Gt11o80.png)  
+####从模式：外部时钟模式2+触发模式  
+外部时钟模式2可以和另一种从模式（除了外部时钟模式1和编码器模式）结合使用。在这种情况下，ETR信号用作外部时钟输入，在复位模式、门控模式或触发模式下，可以选择另一个输入源作为触发输入TRGI。不建议通过设置TIMx_SMCR中的TS来选择ETR作为TRGI。  
+在下面的例子中，当TI1上出现上升沿时，向上计数器在ETR的每个上升沿处计数：  
+1. 通过如下设置TIMx_SMCR，配置外部触发电路：  
+　- ETF=0000：不滤波  
+　- ETPS=00：不分频  
+　- ETP=0：检测ETR上升沿，并且ECE=1，使能外部时钟模式2  
+2. 如下配置通道1，检测TI1上升沿：  
+　- IC1F=0000：不滤波  
+　- 捕获预分频器不用于触发操作，不需要配置  
+　- TIMx_CCMR1中的CC1S=01，选择TI1作为输入源  
+　- TIMx_CCER中的CC1P=0,CC1NP=0，确定极性（只检测上升沿）  
+3. TIMx_SMCR中的SMS=110，配置定时器为触发模式。TIMx_SMCR中的TS=101，选择TI1作为输入源。  
+######External clock mode 2 + trigger mode code example  
+
+	/* (1) Configure no input filter (ETF=0000, reset value)
+	       configure prescaler disabled (ETPS = 0, reset value)
+	       select detection on rising edge on ETR (ETP = 0, reset value)
+	       enable external clock mode 2 (ECE = 1) */
+	/* (2) Configure no input filter (IC1F=0000, reset value)
+	       select input capture source on TI1 (CC1S = 01) */
+	/* (3) Select polarity by writing CC1P=0 (reset value) in the TIMx_CCER register */
+	/* (4) Configure the timer in trigger mode by writing SMS=110
+	       Select TI1 as the trigger input source by writing TS=101
+	       in the TIMx_SMCR register. */
+	TIMx->SMCR |= TIM_SMCR_ECE; /* (1) */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0; /* (2)*/
+	TIMx->CCER &= ~TIM_CCER_CC1P; /* (3) */
+	TIMx->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1
+	            | TIM_SMCR_TS_2 | TIM_SMCR_TS_0; /* (4) */
+	/* Use TI2FP2 as trigger 1 */
+	/* (1) Map TI2FP2 on TI2 by writing CC2S=01 in the TIMx_CCMR1 register */
+	/* (2) TI2FP2 must detect a rising edge, write CC2P=0 and CC2NP=0
+	       in the TIMx_CCER register (keep the reset value) */
+	/* (3) Configure TI2FP2 as trigger for the slave mode controller (TRGI)
+	       by writing TS=110 in the TIMx_SMCR register,
+	       TI2FP2 is used to start the counter by writing SMS to ‘110'
+	       in the TIMx_SMCR register (trigger mode) */
+	TIMx->CCMR1 |= TIM_CCMR1_CC2S_0; /* (1) */
+	//TIMx->CCER &= ~(TIM_CCER_CC2P | TIM_CCER_CC2NP); /* (2) */
+	TIMx->SMCR |= TIM_SMCR_TS_2 | TIM_SMCR_TS_1
+	            | TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1; /* (3) */  
+当TI1上升沿出现，计数器被使能，并且TIF被置1。计数器将在ETR的上升沿计数。  
+ETR出现上升沿到实际计数器计数之间的延时是ETRP输入上的重新同步电路造成的。  
+![](https://i.imgur.com/lif4x5f.png)  
+###定时器同步  
