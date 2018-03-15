@@ -596,3 +596,230 @@ TI2上出现上升沿到实际计数器开始计数之间的延迟是TI2输入�
 ETR出现上升沿到实际计数器计数之间的延时是ETRP输入上的重新同步电路造成的。  
 ![](https://i.imgur.com/lif4x5f.png)  
 ###定时器同步  
+TIMx定时器在内部连接到一起，以实现定时器同步或链接。当一个定时器配置为主模式时，可以对另一个配置为从模式的定时器的计数器进行复位、启动、停止或提供时钟。  
+![](https://i.imgur.com/OD8FEva.png)  
+####使用一个定时器作为另一个定时器的预分频器  
+例如，你可以将TIM1配置为TIM3的预分频器。参考图128。步骤如下：  
+- 配置TIM1为主模式，它可以在每次更新事件UEV发生时输出周期性的触发信号。如果向TIM1_CR2中写入MMS=010，则当每次发生更新事件时，TRGO1上输出上升沿。  
+- 将TIM1的TRGO1输出连接到TIM3，TIM3必须配置为使用ITR0作为内部触发的从模式。通过向TIM3_SMCR中写入TS=0000，选择ITR0。  
+- 然后将TIM3的从模式控制器配置为外部时钟模式1（向TIMx_SMCR中写入SMS=111）。这样TIM3的时钟将由TIM1周期性触发信号的上升沿（即TIM1计数器溢出）提供。  
+- 最后向各自的TIMx_CR1中写入CEN=1，使能两个定时器。必须确保使能TIM3之前TIM1已经使能。  
+######Timer prescaling another timer code example  
+
+	/* TIMy is slave of TIMx */
+	/* (1) Select Update Event as Trigger output (TRG0) 
+           by writing MMS = 010 in TIMx_CR2. */
+	/* (2) Configure TIMy in slave mode using ITR1 as internal trigger
+	       by writing TS = 000 in TIMy_SMCR (reset value)
+	       Configure TIMy in external clock mode 1, by writing SMS=111 in the
+	       TIMy_SMCR register. */
+	/* (3) Set TIMx prescaler to 47999 in order to get an increment each 1ms */
+	/* (4) Set TIMx Autoreload to 999 in order to get an overflow (so an UEV) each second */
+	/* (5) Set TIMy Autoreload to 24*3600-1 in order to get an overflow each 24-hour */
+	/* (6) Enable the counter by writing CEN=1 in the TIMx_CR1 register. */
+	/* (7) Enable the counter by writing CEN=1 in the TIMy_CR1 register. */
+	TIMx->CR2 |= TIM_CR2_MMS_1; /* (1) */
+	TIMy->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1 | TIM_SMCR_SMS_0; /* (2) */
+	TIMx->PSC = 47999; /* (3) */
+	TIMx->ARR = 999; /* (4) */
+	TIMy->ARR = (24 * 3600) - 1; /* (5) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (6) */
+	TIMy->CR1 |= TIM_CR1_CEN; /* (7) */  
+注：如果TIM1的OCxREF用作触发输出（MMS=1xx），它的上升沿将用作TIM3计数器的时钟。  
+####用一个定时器使能另一个定时器  
+在这个例子中，我们使用TIM1的比较输出1控制TIM3的使能。参考图128的连接。当TIM1的OC1REF为高电平时，TIM3按照分频后的内部时钟开始计数。2个定时器的计数器时钟都由内部时钟CK_INT/3提供（f<sub>CK_CNT</sub>=f<sub>CK_INT</sub>/3）。  
+- 配置TIM1为主模式，比较输出1参考信号OC1REF作为触发输出TRGO（TIM1_CR2中的MMS=100）。  
+- 配置TIM1的OC1REF波形（配置TIM1_CCMR1寄存器）。  
+- 配置TIM3接收来自TIM1的内部触发（TIM3_SMCR中的TS=000）。  
+- 配置TIM3工作在门控模式（TIM3_SMCR中的SMS=101）。  
+- 使能TIM3，向TIM3_CR1中写入CEN=1。  
+- 启动TIM1，向TIM1_CR1中写入CEN=1。  
+######Timer enabling another timer code example  
+
+	/* TIMy is slave of TIMx */
+	/* (1) Configure Timer x master mode to send its Output Compare 1 Reference
+	       (OC1REF) signal as trigger output (MMS=100 in the TIM1_CR2 register). */
+	/* (2) Configure the Timer x OC1REF waveform (TIM1_CCMR1 register)
+	       Channel 1 is in PWM mode 1 when the counter is less than the
+	       capture/compare register (write OC1M = 110) */
+	/* (3) Configure TIMy in slave mode using ITR1 as internal trigger
+	       by writing TS = 000 in TIMy_SMCR (reset value)
+	       Configure TIMy in gated mode, by writing SMS=101 in the
+	       TIMy_SMCR register. */
+	/* (4) Set TIMx prescaler to 2 */
+	/* (5) Set TIMy prescaler to 2 */
+	/* (6) Set TIMx Autoreload to 999 in order to get an overflow (so an UEV) each 100ms */
+	/* (7) Set capture compare register to a value between 0 and 999 */
+	TIMx->CR2 |= TIM_CR2_MMS_2; /* (1) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1; /* (2) */
+	TIMy->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_0; /* (3) */
+	TIMx->PSC = 2; /* (4) */
+	TIMy->PSC = 2; /* (5) */
+	TIMx->ARR = 999; /* (6) */
+	TIMx-> CCR1 = 700; /* (7) */
+	/* Configure the slave timer to generate toggling on each count */
+	/* (1) Configure the TIMy in PWM mode 1 (write OC1M = 110) */
+	/* (2) Set TIMy Autoreload to 1 */
+	/* (3) Set capture compare register to 1 */
+	TIMy->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1; /* (1) */
+	TIMy->ARR = 1; /* (2) */
+	TIMy-> CCR1 = 1; /* (3) */
+	/* Enable the output of TIMx OC1 */
+	/* (1) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1) */
+	/* (2) Enable output (MOE = 1) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (1) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (2) */
+	/* Enable the output of TIMy OC1 */
+	/* (1) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1) */
+	/* (2) Enable output (MOE = 1) */
+	TIMy->CCER |= TIM_CCER_CC1E; /* (1) */
+	TIMy->BDTR |= TIM_BDTR_MOE; /* (2) */
+	/* (1) Enable the slave counter first by writing CEN=1 in the TIMy_CR1 register. */
+	/* (2) Enable the master counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMy->CR1 |= TIM_CR1_CEN; /* (1) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (2) */  
+注：TIM3的计数器时钟和TIM1的计数器时钟是不同步的，此模式只影响TIM3的计数器使能信号。  
+![](https://i.imgur.com/8yMJvgO.png)  
+在图129的例子中，TIM3的计数器和预分频器在开始计数器前未被初始化，所以计数器从当前值继续计数。在启动TIM1之前，可以复位两个定时器使它们从给定值开始计数；你可以向计数器中写入任何值。向TIMx_EGR中写入UG=1，可以复位定时器。  
+在下面的例子中，我们同步TIM1和TIM3。TIM1是主模式，从0开始计数；TIM3是从模式，从0xE7开始计数。2个定时器的预分频器分频率是一样的。当向TIM1_CR1中写入CEN=0禁止TIM1时，TIM3也随即停止。  
+- 配置TIM1为主模式，它的计数器使能信号CNT_EN作为触发输出TRGO（设置TIMx_CR2中的MMS=001）。  
+- 配置TIM1的OC1REF波形（TIM1_CCMR1）。  
+- 配置TIM3接收来自TIM1的内部触发输入（TIM3_SMCR中的TS=000）。  
+- 配置TIM3为门控模式（TIM3_SMCR中的SMS=101）。  
+- 复位TIM1，向TIM1_EGR中写入UG=1。  
+- 复位TIM3，向TIM3_EGR中写入UG=1。  
+- 初始化TIM3的计数器为0xE7，向TIM3_CNT写入0xE7。  
+- 使能TIM3，向TIM3_CR1中写入CEN=1。  
+- 启动TIM1，向TIM1_CR1中写入CEN=1。  
+- 停止TIM1，向TIM1_CR1中写入CEN=0。  
+######Master and slave synchronization code example  
+
+	/* (1) Configure Timer x master mode to send its enable signal
+	       as trigger output (MMS=001 in the TIM1_CR2 register). */
+	/* (2) Configure the Timer x Channel 1 waveform (TIM1_CCMR1 register)
+	       is in PWM mode 1 (write OC1M = 110) */
+	/* (3) Configure TIMy in slave mode using ITR0 as internal trigger
+	       by writing TS = 000 in TIMy_SMCR (reset value)
+	       Configure TIMy in gated mode, by writing SMS=101 in the
+	       TIMy_SMCR register. */
+	/* (4) Set TIMx prescaler to 2 */
+	/* (5) Set TIMy prescaler to 2 */
+	/* (6) Set TIMx Autoreload to 99 in order to get an overflow (so an UEV) each 10ms */
+	/* (7) Set capture compare register to a value between 0 and 99 */
+	TIMx->CR2 |= TIM_CR2_MMS_0; /* (1) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1; /* (2) */
+	TIMy->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_0; /* (3) */
+	TIMx->PSC = 2; /* (4) */
+	TIMy->PSC = 2; /* (5) */
+	TIMx->ARR = 99; /* (6) */
+	TIMx-> CCR1 = 25; /* (7) */
+	/* Configure the slave timer Channel 1 as PWM as Timer to show synchronicity */
+	/* (1) Configure the TIMy in PWM mode 1 (write OC1M = 110) */
+	/* (2) Set TIMy Autoreload to 99 */
+	/* (3) Set capture compare register to 25 */
+	TIMy->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1; /* (1) */
+	TIMy->ARR = 99; /* (2) */
+	TIMy-> CCR1 = 25; /* (3) */
+	/* Enable the output of TIMx OC1 */
+	/* (1) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (2) Enable output (MOE = 1) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (1) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (2) */
+	/* Enable the output of TIMy OC1 */
+	/* (1) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1) */
+	/* (2) Enable output (MOE = 1) */
+	TIMy->CCER |= TIM_CCER_CC1E; /* (1) */
+	TIMy->BDTR |= TIM_BDTR_MOE; /* (2) */
+	/* (1) Reset Timer x by writing ‘1 in UG bit (TIMx_EGR register) */
+	/* (2) Reset Timer y by writing ‘1 in UG bit (TIMy_EGR register) */
+	TIMx->EGR |= TIM_EGR_UG; /* (1) */
+	TIMy->EGR |= TIM_EGR_UG; /* (2) */
+	/* (1) Enable the slave counter first by writing CEN=1 in the TIMy_CR1 register.
+	       TIMy will start synchronously with the master timer */
+	/* (2) Start the master counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMy->CR1 |= TIM_CR1_CEN; /* (1) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (2) */  
+![](https://i.imgur.com/HHqWQqm.png)  
+####使用一个定时器启动另一个定时器  
+在这个例子中，我们用TIM1的更新事件来使能TIM3。参考图128的连接。当TIM1产生一个更新事件，TIM3就按照分频后的内部时钟从当前值（可以非0）开始计数。当TIM3收到触发信号，它的CEN位被自动置1，计数器开始计数直到软件将TIM3_CR1中的CEN清0。2个计数器的时钟都由CK_INT/3得到（f<sub>CK_CNT</sub>=f<sub>CK_INT</sub>/3）。  
+- 配置TIM1为主模式，将更新事件UEV作为触发输出TRGO（TIM1_CR2中的MMS=010）。  
+- 配置TIM1周期（TIM1_ARR寄存器）。  
+- 配置TIM3接收来自TIM1的内部触发输入（TIM3_SMCR中的TS=000）。  
+- 配置TIM3为触发模式（TIM3_SMCR中的SMS=110）。  
+- 启动TIM1（TIM1_CR1中的CEN=1）。  
+![](https://i.imgur.com/AcQDoqY.png)  
+在上面的例子，在启动计数前可以初始化两个计数器。  
+图132除了触发输出使用TIM1计数使能信号CNT_EN外，其他配置和图131相同。  
+![](https://i.imgur.com/WZ3ccHq.png)  
+####使用一个外部触发同步启动2个定时器  
+在这个例子中，我们设置当TI1上出现上升沿时，TIM1使能；并且TIM3随着TIM1使能而使能。连接参考图128。为了确保计数器对齐，TIM1必须配置为主/从模式（从对应TI1，主对应TIM3）：  
+- 配置TIM1为主模式，使用它的使能信号作为触发输出TRGO（TIM1_CR1中的MMS=001）。  
+- 配置TIM1为从模式，接收来自TI1的触发输入（TIM1_SMCR中的TS=100）。  
+- 配置TIM1为触发模式（TIM1_SMCR中的SMS=110）。  
+- 配置TIM1为主/从模式（TIM1_SMCR中的MSM=1）。  
+- 配置TIM3为从模式，接收来自TIM1的触发输入（TIM3_SMCR中的TS=000）。  
+- 配置TIM3为触发模式（TIM3_SMCR中的SMS=110）。  
+######Two timers synchronized by an external trigger code example  
+
+	/* (1) Configure TIMx master mode to send its enable signal
+	       as trigger output (MMS=001 in the TIM1_CR2 register). */
+	/* (2) Configure TIMx in slave mode to get the input trigger from TI1 by writing TS = 100
+	       Configure TIMx in trigger mode, by writing SMS=110
+	       Configure TIMx in Master/Slave mode by writing MSM = 1
+           in the TIMx_SMCR register. */
+	/* (3) Configure TIMy in slave mode to get the input trigger from Timer1 by writing TS = 000
+	       Configure TIMy in trigger mode, by writing SMS=110
+           in the TIMy_SMCR register. */
+	/* (4) Reset Timer x counter by writing ‘1 in UG bit (TIMx_EGR register) */
+	/* (5) Reset Timer y counter by writing ‘1 in UG bit (TIMy_EGR register) */
+	TIMx->CR2 |= TIM_CR2_MMS_0; /* (1)*/
+	TIMx->SMCR |= TIM_SMCR_TS_2 | TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1 | TIM_SMCR_MSM; /* (2) */
+	TIMy->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1; /* (3) */
+	TIMx->EGR |= TIM_EGR_UG; /* (4) */
+	TIMy->EGR |= TIM_EGR_UG; /* (5) */
+	/* Configure the Timer Channel 2 as PWM */
+	/* (1) Configure the Timer x Channel 2 waveform (TIM1_CCMR1 register)
+	       is in PWM mode 1 (write OC2M = 110) */
+	/* (2) Set TIMx prescaler to 2 */
+	/* (3) Set TIMx Autoreload to 99 in order to get an overflow (so an UEV) each 10ms */
+	/* (4) Set capture compare register to a value between 0 and 99 */
+	TIMx->CCMR1 |= TIM_CCMR1_OC2M_2 | TIM_CCMR1_OC2M_1; /* (1) */
+	TIMx->PSC = 2; /* (2) */
+	TIMx->ARR = 99; /* (3) */
+	TIMx->CCR2 = 25; /* (4) */
+	/* Configure the slave timer Channel 1 as PWM as Timer to show synchronicity */
+	/* (1) Configure the TIMy in PWM mode 1 (write OC1M = 110) */
+	/* (2) Set TIMy prescaler to 2 */
+	/* (3) Set TIMx Autoreload to 99 */
+	/* (4) Set capture compare register to 25 */
+	TIMy->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1; /* (1) */
+	TIMy->PSC = 2; /* (2) */
+	TIMy->ARR = 99; /* (3) */
+	TIMy-> CCR1 = 25; /* (4) */
+	/* Enable the output of TIMx OC1 */
+	/* (1) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (2) Enable output (MOE = 1)*/
+	TIMx->CCER |= TIM_CCER_CC2E; /* (1) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (2) */
+	/* Enable the output of TIMy OC1 */
+	/* (1) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (2) Enable output (MOE = 1)*/
+	TIMy->CCER |= TIM_CCER_CC1E; /* (1) */
+	TIMy->BDTR |= TIM_BDTR_MOE; /* (2) */  
+当TIM1的TI1上出现上升沿，2个计数器按照内部时钟，同步开始计数；并且2个定时器的TIF标志都被置1。  
+注：这个例子中，2个定时器在启动前都进行了初始化（设置各自的UG=1）。2个计数器都从0开始计数，但是你可以通过改变任一个计数器寄存器TIMx_CNT，在两者之间插入一个偏移量。你可以看到主/从模式在TIM1的CNT_EN和CK_PSC之间插入了一段延时，以使TIM1和TIM3同步计数。  
+![](https://i.imgur.com/pxThtYP.png)  
+###调试模式  
+当微控制器进入调试模式（ARM Cortex-M0内核停止），TIMx计数器根据DBGMCU模块中的DBG_TIMx_STOP位的设置，正常工作或停止。  
+##TIM3寄存器  
+外设寄存器支持板子（16位）或字（32位）访问。  
+###TIM3控制寄存器1（TIM3_CR1）  
+![](https://i.imgur.com/xzRgeYX.png)  
+![](https://i.imgur.com/q7tLhsu.png)  
+![](https://i.imgur.com/aMrIpEC.png)  
