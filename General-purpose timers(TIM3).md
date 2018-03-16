@@ -884,3 +884,51 @@ TIMx定时器在内部连接到一起，以实现定时器同步或链接。当�
 ![](https://i.imgur.com/R9fwULH.png)  
 ###TIM3全传输DMA地址（TIM3_DMAR）  
 ![](https://i.imgur.com/A2t1uZG.png)  
+####如何使用DMA连续传输特性的例子  
+在这个例子中，使用定时器DMA连续传输特性来更新CCRx(x=2,3,4)寄存器的内容，以半字传输。  
+步骤如下：  
+1. 配置相关的DMA通道，如下：  
+　- DMA通道外设地址是DMAR寄存器地址。  
+　- DMA通道内存地址是包含有要通过DMA传输到CCRx寄存器的数据的RAM中的一块缓冲区。  
+　- 传输数据的数量=3（见下面的注）。  
+　- DMA循环模式禁止。  
+2. 配置DCR寄存器的DBA和DBL：DBL=3次传输，DBA=0xE。  
+3. 使能TIMx更新DMA请求（设置TIMx_DIER中的UDE=1）。  
+4. 使能TIMx。  
+5. 使能DMA通道。  
+######DMA burst feature code example  
+
+	/* In this example TIMx has been previously configured in PWM center-aligned */
+	/* Configure DMA Burst Feature */
+	/* Configure the corresponding DMA channel */
+	/* (1) Set DMA channel peripheral address is the DMAR register address */
+	/* (2) Set DMA channel memory address is the address of the buffer in the RAM
+           containing the data to be transferred by DMA into CCRx registers */
+	/* (3) Set the number of data transfer to sizeof(Duty_Cycle_Table) */
+	/* (4) Configure DMA transfer in CCR register,
+	       enable the circular mode by setting CIRC bit (optional),
+	       set memory size to 16_bits MSIZE = 01,
+	       set peripheral size to 32_bits PSIZE = 10,
+	       enable memory increment mode by setting MINC,
+	       set data transfer direction read from memory by setting DIR. */
+	/* (5) Configure TIMx_DCR register with DBL = 3 transfers
+	       and DBA = (@TIMx->CCR2 - @TIMx->CR1) >> 2 = 0xE */
+	/* (6) Enable the TIMx update DMA request by setting UDE bit in DIER register */
+	/* (7) Enable TIMx */
+	/* (8) Enable DMA channel */
+	DMA1_Channel2->CPAR = (uint32_t)(&(TIMx->DMAR)); /* (1) */
+	DMA1_Channel2->CMAR = (uint32_t)(Duty_Cycle_Table); /* (2) */
+	DMA1_Channel2->CNDTR = 10*3; /* (3) */
+	DMA1_Channel2->CCR |= DMA_CCR_CIRC | DMA_CCR_MSIZE_0 | DMA_CCR_PSIZE_1
+	                    | DMA_CCR_MINC | DMA_CCR_DIR; /* (4) */
+	TIMx->DCR = (3 << 8)
+	          + ((((uint32_t)(&TIMx->CCR2))
+	          - ((uint32_t)(&TIMx->CR1))) >> 2); /* (5) */
+	TIMx->DIER |= TIM_DIER_UDE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (7) */
+	DMA1_Channel2->CCR |= DMA_CCR_EN; /* (8) */  
+注：在本例中，每个CCRx寄存器被更新一次。如果要更新2次CCRx寄存器，传输数据的数量应该是6。假定RAM中的数据是data1,data2,data3,data4,data5和data6。数据传输到CCRx的过程如下：在第一个更新DMA请求时，data1被传输到CCR2，data2被传输到CCR3，data3被传输到CCR4；在第二次更新DMA请求时，data4被传输到CCR2，data5被传输到CCR3，data6被传输到CCR4。  
+##TIM3寄存器映射  
+![](https://i.imgur.com/0G2W8iO.png)  
+![](https://i.imgur.com/kvJnLr8.png)  
+![](https://i.imgur.com/FkyeTBT.png)  
