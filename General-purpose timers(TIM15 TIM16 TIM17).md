@@ -81,3 +81,51 @@ TIM15/16/17的计数器只能向上计数，即从0计数到自动重载值（TI
 重复计数器是自动重载的；重复率由TIMx_RCR定义。当软件设置TIMx_EGR中的UG=1或硬件通过从模式控制器产生更新事件，无论此时重复计数器的值是多少，都会立即发生更新事件，并且重复计数器重载入TIMx_RCR的值。  
 ![](https://i.imgur.com/3GqlSZa.png)  
 ###时钟源  
+计数器时钟可以由下列时钟源提供：  
+- 内部时钟CK_INT  
+- 外部时钟模式1：外部输入引脚，仅TIM15可用此模式  
+- 内部触发输入ITRx（同样只有TIM15可以选择此模式）：用一个定时器做另一个定时器的预分频器。例如，可以配置TIM1作为TIM15的预分频器。  
+####内部时钟源CK_INT  
+对于TIM15，如果从模式控制器被禁止（SMS=000），那么TIMx_CR1中的CEN和DIR位，以及TIMx_EGR中的UG位，是实际的控制位，且只能由软件修改（除了UG位是由硬件自动清零）。一旦CEN=1，内部始终CK_INT就提供给预分频器。  
+TIM16/17的计数器时钟只由内部时钟提供。  
+图170显示了向上计数器在正常模式和不分频的情况下的行为。  
+![](https://i.imgur.com/CtWDiI2.png)  
+####外部时钟模式1  
+此模式只有TIM15可用。当TIMx_SMCR中的SMS=111时，选择此模式。计数器在选定的输入的每一次上升或下降沿计数。  
+![](https://i.imgur.com/oNsARM2.png)  
+TIM15没有ETR，所以上图出现的ETRF是应该去掉的。  
+例如，配置计数器在TI2输入的上升沿计数，步骤如下：  
+1. 配置通道2检测TI2输入的上升沿，通过设置TIMx_CCMR1中的CC2S=01，将通道2连接到TI2。  
+2. 配置输入滤波带宽，通过设置TIMx_CCMR1中的IC2F[3:0]（如果不需要滤波，则保持IC2F=0000）。  
+3. 选择上升沿极性，通过设置TIIMx_CCER中的CC2P=0和CC2NP=0。  
+4. 配置定时器使用外部时钟模式1，通过设置TIMx_SMCR中的SMS=111。  
+5. 选择TI2作为触发输入源，通过设置TIMx_SMCR中的TS=110。  
+6. 启动计数器，通过设置TIMx_CR1中的CEN=1。  
+注：捕获预分频器不用于触发操作，所以不需要设置它。  
+######Upcounter on TI2 rising edge code example  
+
+	/* (1) Enable the peripheral clock of Timer 15 */
+	/* (2) Enable the peripheral clock of GPIOA */
+	/* (3) Select Alternate function mode (10) on GPIOA pin 3 */
+	/* (4) Select TIM15_CH2 on PA3 by enabling AF0 for pin 3 in GPIOA AFRH register */
+	RCC->APB2ENR |= RCC_APB2ENR_TIM15EN; /* (1) */
+	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; /* (2) */
+	GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODER9)) | (GPIO_MODER_MODER9_1); /* (3) */
+	GPIOA->AFR[0] |= 0x2 << (3*4); /* (4) */
+	/* (1) Configure channel 2 to detect rising edges on the TI2 input by writing CC2S = ‘01’,
+           and configure the input filter duration by writing the IC2F[3:0] bits 
+           in the TIMx_CCMR1 register (if no filter is needed, keep IC2F=0000).*/
+	/* (2) Select rising edge polarity by writing CC2P=0 
+           in the TIMx_CCER register (reset value). */
+	/* (3) Configure the timer in external clock mode 1 by writing SMS=111
+	       Select TI2 as the trigger input source by writing TS=110
+	       in the TIMx_SMCR register.*/
+	/* (4) Enable the counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMx->CCMR1 |= TIM_CCMR1_IC2F_0 | TIM_CCMR1_IC2F_1 | TIM_CCMR1_CC2S_0; /* (1) */
+	TIMx->CCER &= (uint16_t)(~TIM_CCER_CC2P); /* (2) */
+	TIMx->SMCR |= TIM_SMCR_SMS | TIM_SMCR_TS_2 | TIM_SMCR_TS_1; /* (3) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (4) */  
+当TI2上出现上升沿时，计数器就计一次数，并且TIF标志置1。  
+从TI2出现上升沿到实际计数器计数之间的延时是由TI2输入端的重新同步电路造成的。  
+![](https://i.imgur.com/ckwVgA9.png)  
+###捕获/比较通道  
