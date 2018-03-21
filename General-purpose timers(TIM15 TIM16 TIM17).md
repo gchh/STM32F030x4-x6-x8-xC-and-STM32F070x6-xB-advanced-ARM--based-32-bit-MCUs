@@ -218,4 +218,27 @@ TIM15没有ETR，所以上图出现的ETRF是应该去掉的。
 - 选择TI1FP1的有效极性（用于TIMx_CCR1捕获和计数器清零）：CC1P=0,CC1NP=0，选择上升沿有效。  
 - 选择TIMx_CCR2的有效输入：TIMx_CCMR1的CC2S=10，选择TI1。  
 - 选择TI1FP2的有效极性（用于TIMx_CCR2捕获）：CC2P=1,CC2NP=0，选择下降沿有效。  
-- 
+- 选择有效的触发输入：TIMx_SMCR中的TS=101，选择TI1FP1。  
+- 配置从模式控制器为复位模式：TIMx_SMCR中的SMS=100。  
+- 使能捕获：TIMx_CCER中的CC1E=1,CC2E=1。  
+######PWM input configuration code example  
+
+	/* (1) Select the active input TI1 for TIMx_CCR1 (CC1S = 01),
+	       select the active input TI1 for TIMx_CCR2 (CC2S = 10) */
+	/* (2) Select TI1FP1 as valid trigger input (TS = 101)
+	       configure the slave mode in reset mode (SMS = 100) */
+	/* (3) Enable capture by setting CC1E and CC2E
+	       select the rising edge on CC1 and CC1N (CC1P = 0 and CC1NP = 0, reset value),
+	       select the falling edge on CC2 (CC2P = 1). */
+	/* (4) Enable interrupt on Capture/Compare 1 */
+	/* (5) Enable counter */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0 | TIM_CCMR1_CC2S_1; /* (1)*/
+	TIMx->SMCR |= TIM_SMCR_TS_2 | TIM_SMCR_TS_0 | TIM_SMCR_SMS_2; /* (2) */
+	TIMx->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC2P; /* (3) */
+	TIMx->DIER |= TIM_DIER_CC1IE; /* (4) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
+![](https://i.imgur.com/vt0rCFg.png)  
+###强制输出模式  
+在输出模式（TIMx_SMCR中的CCxS=00）下，每个比较输出信号（OCxREF及相应的OCx/OCxN）可以由软件直接强制为有效或无效电平，而不论输出比较寄存器和计数器的计较结果如何。  
+要强制比较输出信号（OCxREF/0Cx）为其有效电平，只需要向TIMx_CCMRx中写入OCxM=101。这样OCxREF就被强制为高电平（因为OCxREF的有效电平总是高电平），而OCx的输出电平和CCxP设置的极性相反。  
+例如：
