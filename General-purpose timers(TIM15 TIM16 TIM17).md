@@ -245,3 +245,90 @@ TIM15没有ETR，所以上图出现的ETRF是应该去掉的。
 OCxREF信号可以被强制为低电平，通过设置TIMx_CCMRx中的OCxM=100。  
 不管怎样，TIMx_CCRx影子寄存器和计数器之间的比较会一直进行下去，并且置位相应的位。因此，同样可以产生中断和DMA请求。  
 ###比较输出模式  
+此功能用于控制输出波形或指示一段时间已经过去。  
+当捕获/比较寄存器和计数器的内容匹配时，比较输出功能做出以下操作：  
+- 相应的输出引脚上输出所配置的值，该值由比较输出模式（由TIMx_CCMRx中的OCxM设置）和输出极性（又TIMx_CCER中的CCxP设置）共同定义。如果OCxM=000，当比较匹配时，不会影响输出；如果OCxM=001，比较匹配时，输出置为有效电平；如果OCxM=010，则比较匹配时，输出置为无效电平。  
+- 状态寄存器TIMx_SR中的中断标志位CCxIF置1。  
+- 如果TIMx_DIER中的中断使能位CCxIE=1，则产生中断。  
+- 如果TIMx_DIER中的DMA使能位CCxDE=1和TIMx_CR2中的捕获/比较DMA选择位CCDS=0，则发出DMA请求。  
+TIMx_CCRx寄存器可以选择是否使用预装载寄存器，通过设置TIMx_CCMRx中的OCxPE位。  
+在比较输出模式下，更新事件UEV不会影响OCxREF和OCx的输出。同步的精度可以达到计数器的一个计数周期。比较输出模式也可以用于输出单个脉冲（单脉冲模式）。  
+比较输出模式的配置步骤：  
+1. 选择计数器时钟（内部，外部，预分频器）。  
+2. 向TIMx_ARR和TIMx_CCRx中写入所需数据。  
+3. 如果需要中断，设置CCxIE=1。  
+4. 选择输出模式。例如：  
+　- OCxM=011，当CNT=CCRx时，OCx输出翻转  
+　- OCxPE=0，禁止预装载寄存器  
+　- CCxP=0，选择高电平有效  
+　- CCxE=1，使能输出  
+5. TIMx_CR1中的CEN=1，启动计数器。  
+######Output compare configuration code example  
+
+	/* (1) Set prescaler to 3, so APBCLK/4 i.e 12MHz */
+	/* (2) Set ARR = 12000 -1 */
+	/* (3) Set CCRx = ARR, as timer clock is 12MHz, an event occurs each 1 ms */
+	/* (4) Select toggle mode on OC1 (OC1M = 011),
+	       disable preload register on OC1 (OC1PE = 0, reset value) */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (6) Enable output (MOE = 1)*/
+	/* (7) Enable counter */
+	TIMx->PSC |= 3; /* (1) */
+	TIMx->ARR = 12000 - 1; /* (2) */
+	TIMx->CCR1 = 12000 - 1; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_0 | TIM_CCMR1_OC1M_1; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5)*/
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (7) */  
+TIMx_CCRx寄存器的值可以随时更新以控制输出波形，但是前提是不使用预装载寄存器（OCxPE=0，否则，只有发生更新事件UEV时，TIMx_CCRx的影子寄存器才被更新）。图178给出了示例。  
+![](https://i.imgur.com/pyJjCvu.png)  
+###PWM输出模式  
+PWM模式用于产生一个PWM信号，该信号由TIMx_ARR的值确定频率，由TIMx_CCRx的值确定占空比。  
+每个输出通道可以独立选择PWM模式（每个OCx输出一个PWM信号），通过TIMx_CCMRx中的OCxM=110选择PWM模式1或OCxM=111选择PWM模式2。必须设置TIMx_CCMRx中的OCxPE=1，使能相应的TIMx_CCRx的预载寄存器；以及设置TIMx_CR1中的ARPE=1，使能TIMx_ARR的预载寄存器。  
+因为只有发生更新事件时，预载寄存器的值才被拷贝到影子寄存器中，所以在启动计算器之前，必须通过设置TIMx_EGR中的UG=1来初始化所有寄存器。  
+OCx输出的极性由TIMx_CCER中的CCxP选择，可以选择高电平有效或低电平有效。TIMx_CCER中的CCxE和CCxNE，以及TIMx_BDTR中的MOE,OSSI和OSSR，共同控制OCx的输出。  
+无论PWM模式1还是模式2，TIMx_CNT都要和TIMx_CCRx进行比较，以确定是否TIMx_CCRx≤TIMx_CNT或TIMx_CNT≤TIMx_CCRx（取决于计数方向）。  
+根据TIMx_CR1中的CMS位可以设置边沿对齐模式或中心对齐模式产生PWM。但是TIM15/16/17计数器只能向上计数，所以只能产生边沿对齐的PWM信号。  
+####PWM边沿对齐向上计数模式  
+以PWM模式1为例，当TIMx_CNT＜TIMx_CCRx时，PWM参考信号OCxREF为高电平（有效电平）；否则，为低电平。如果TIMx_CCRx大于TIMx_ARR，OCxREF会一直保持高电平。如果TIMx_CCRx=0，OCxREF会保持为低电平。  
+图179显示了当TIMx_ARR=8时边沿对齐PWM的波形。  
+![](https://i.imgur.com/AmRKMFy.png)  
+######Edge-aligned PWM configuration example  
+
+	/* (1) Set prescaler to 47, so APBCLK/48 i.e 1MHz */
+	/* (2) Set ARR = 8, as timer clock is 1MHz the period is 9 us */
+	/* (3) Set CCRx = 4, , the signal will be high during 4 us */
+	/* (4) Select PWM mode 1 on OC1 (OC1M = 110),
+	       enable preload register on OC1 (OC1PE = 1) */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1)*/
+	/* (6) Enable output (MOE = 1)*/
+	/* (7) Enable counter (CEN = 1)
+	       select edge aligned mode (CMS = 00, reset value)
+	       select direction as upcounter (DIR = 0, reset value) */
+	/* (8) Force update generation (UG = 1) */
+	TIMx->PSC = 47; /* (1) */
+	TIMx->ARR = 8; /* (2) */
+	TIMx->CCR1 = 4; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1PE; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (7) */
+	TIMx->EGR |= TIM_EGR_UG; /* (8) */  
+###互补输出和死区插入  
+通用定时器TIM15/16/17能够输出一路互补信号，并且管理输出的关断和接通瞬间。  
+这段时间通常被称为死区，用户必须根据与输出连接的器件及其特性（电平转换的固有延时，开关器件产生的延时...）调整死区时间。  
+每一路输出可以独立选择输出极性（主输出OCx或互补输出OCxN）。通过TIMx_CCER中的CCxP和CCxNP来选择极性。  
+互补信号OCx和OCxN由几个控制位联合控制：TIMx_CCER中的CCxE和CCxNE，TIMx_BDTR中的MOE,OSSI和OSSR，以及TIMx_CR2中的OISx和OISxN。特别的是，当转换到IDLE状态时（MOE变为0），死区也会被激活。  
+同时设置CCxE和CCxNE将插入死区，如果带有刹车电路，还需要设置MOE位。每个通道有一个10位的死区发生器。参考信号OCxREF产生2个输出OCx和OCxN。如果OCx和OCxN高电平有效：  
+- OCx输出信号和参考信号OCxREF相同，只是它的上升沿相对参考信号的上升沿有延迟。  
+- OCxN输出信号和参考信号OCxREF相反，只是它的上升沿相对参考信号的下降沿有延迟。  
+如果延迟大于当前有效输出的宽度（OCx或OCxN），那么相应的脉冲就不会产生。  
+下面的图显示了死区发生器的输出信号和参考信号OCxREF的关系（假定，CCxP=0,CCxNP=0,MOE=1,CCxE=1,CCxNE=1）。  
+![](https://i.imgur.com/buvTqiD.png)  
+![](https://i.imgur.com/iY0jF4J.png)  
+![](https://i.imgur.com/TDbdmsL.png)  
+每个通道的死区延迟是相同的，它由TIMx_BDTR中的DTG位配置。  
+####将OCxREF重定向到OCx或OCxN  
+在输出模式（强制，比较输出或PWM）下，
