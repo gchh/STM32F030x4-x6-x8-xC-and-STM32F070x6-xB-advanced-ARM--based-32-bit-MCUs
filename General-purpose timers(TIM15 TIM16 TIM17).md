@@ -405,3 +405,33 @@ OPM波形由比较寄存器的值决定（要考虑时钟频率和计数器预�
 在本例中，TIMx_CR1中的DIR和CMS位应该保持0（定时器TIM15/16/17无这两位）。  
 由于只需要一个脉冲，所以设置TIMx_CR1中的OPM=1，当发生更新事件（当计数器从自动重载值返回0时）时计数器自动停止。  
 ####特殊情况：OCx快速使能  
+在单脉冲模式下，TIx输入的边沿检测设置CEN位以启动计数器。计数器和比较值的比较结果造成输出跳变。但是这些操作需要几个时钟周期，并且这限制了我们能得到的最小延时t<sub>DELAY</sub>。  
+如果要以最小的延时输出波形，可以设置TIMx_CCMRx中的OCxFE位。OCxREF（和OCx）被强制响应激励，而不依赖比较结果。其新电平和发生比较匹配时相同。仅当PWM1或PWM2模式下，OCxFE才起作用。  
+###TIM15与外部触发同步  
+这部分只应用在STM32F030x8,STM32F070xB和STM32F030xC。  
+TIM15定时器能够在几种模式下和一个外部触发同步：复位模式，门控模式和触发模式。  
+####从模式：复位模式  
+当触发输入事件发生时，计数器和它的预分频器被重新初始化。此外，如果TIMx_CR1中的URS=0，还将产生一个更新事件UEV。那么，所有预装载寄存器（TIMx_ARR,TIMx_CCRx）被更新。  
+在下面的例子中，TI1输入的上升沿导致向上计数器被清零：  
+- 配置通道1检测TI1的上升沿。配置输入滤波带宽（在本例中，不需要滤波，所以保持IC1F=0000）。触发操作不需要使用捕获预分频器，所以不需要设置它。设置TIMx_CCMR1中的CC1S=01，选择TI1作为输入捕获源。设置TIMx_CCER中的CC1P=0，选择上升沿。  
+- 设置TIMx_SMCR中的SMS=100，配置定时器为复位模式。设置TIMx_SMCR中的TS=101，选择TI1作为输入源。  
+- 设置TTMx_CR1中的CEN=1，启动计数器。  
+######Reset mode code example  
+
+	/* (1) Configure channel 1 to detect rising edges on the TI1 input
+	       by writing CC1S = ‘01’,
+	       and configure the input filter duration by writing the IC1F[3:0]
+	       bits in the TIMx_CCMR1 register
+           (if no filter is needed, keep IC1F=0000).*/
+	/* (2) Select rising edge polarity by writing CC1P=0 in the TIMx_CCER register
+	       Not necessary as it keeps the reset value. */
+	/* (3) Configure the timer in reset mode by writing SMS=100
+	       Select TI1 as the trigger input source by writing TS=101
+	       in the TIMx_SMCR register.*/
+	/* (4) Set prescaler to 48000-1 in order to get an increment each 1ms */
+	/* (5) Enable the counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0; /* (1)*/
+	TIMx->CCER &= (uint16_t)(~TIM_CCER_CC1P); /* (2) */
+	TIMx->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_TS_2 | TIM_SMCR_TS_0; /* (3) */
+	TIM1->PSC = 47999; /* (4) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
