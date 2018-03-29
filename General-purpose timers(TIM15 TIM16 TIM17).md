@@ -365,3 +365,43 @@ OCx输出的极性由TIMx_CCER中的CCxP选择，可以选择高电平有效或�
 - 向上计数：CNT<CCRx≤ARR（特别地，0<CCRx）  
 - 向下计数：CNT>CCRx  
 ![](https://i.imgur.com/6v6Rpnj.png)  
+举例，在检测到TI2输入脚的上升沿时，延时t<sub>DELAY</sub>之后，在OC1上输出一个脉宽t<sub>PULSE</sub>的正脉冲。  
+使用TI2FP2作为触发1：  
+- 设置TIMx_CCMR1中的CC2S=01，把TI2FP2映射到TI2上。  
+- 设置TIMx_CCER中的CC2P=0，选择检测TI2FP2的上升沿。  
+- 设置TIMx_SMCR中的TS=110，选择TI2FP2作为从模式控制器的触发输入（TRGI）。  
+- 设置TIMx_SMCR中的SMS=110，选择触发模式，TI2FP2用来启动计数器。  
+######One-Pulse mode code example  
+
+	/* The OPM waveform is defined by writing the compare registers */
+	/* (1) Set prescaler to 47, so APBCLK/48 i.e 1MHz */
+	/* (2) Set ARR = 7, as timer clock is 1MHz the period is 8 us */
+	/* (3) Set CCRx = 5, the burst will be delayed for 5 us (must be > 0) */
+	/* (4) Select PWM mode 2 on OC1 (OC1M = 111),
+	       enable preload register on OC1 (OC1PE = 1, reset value)
+	       enable fast enable (no delay) if PULSE_WITHOUT_DELAY is set */
+	/* (5) Select active high polarity on OC1 (CC1P = 0, reset value),
+	       enable the output on OC1 (CC1E = 1) */
+	/* (6) Enable output (MOE = 1) */
+	/* (7) Write '1 in the OPM bit in the TIMx_CR1 register to stop the counter
+	       at the next update event (OPM = 1),
+	       enable auto-reload register(ARPE = 1) */
+	TIMx->PSC = 47; /* (1) */
+	TIMx->ARR = 7; /* (2) */
+	TIMx->CCR1 = 5; /* (3) */
+	TIMx->CCMR1 |= TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_0
+	             | TIM_CCMR1_OC1PE
+	#if PULSE_WITHOUT_DELAY > 0
+	             | TIM_CCMR1_OC1FE
+	#endif
+	             ; /* (4) */
+	TIMx->CCER |= TIM_CCER_CC1E; /* (5) */
+	TIMx->BDTR |= TIM_BDTR_MOE; /* (6) */
+	TIMx->CR1 |= TIM_CR1_OPM | TIM_CR1_ARPE; /* (7) */  
+OPM波形由比较寄存器的值决定（要考虑时钟频率和计数器预分频器）。  
+- t<sub>DELAY</sub>由TIMx_CCR1寄存器的值定义。  
+- t<sub>PULSE</sub>由自动重载值和比较值的差值定义（TIMx_ARR-TIMx_CCR1）。  
+- 假定想要在比较匹配时，输出波形从0跳转为1；而当计数器到达自动重载值时，输出波形从1跳转为0。要做到这样，需要设置TIMx_CCMR1中的OC1M=111，选择PWM模式2。如果需要，可以设置TIMx_CR1中的ARPE=1和TIMx_CCMR1中的OC1PE=1，使能相应的预装载寄存器。如果预装载寄存器被使能，在写入TIMx_CCR1和TIMx_ARR后，需要设置UG=1产生一个更新，然后等待TI2上的外部触发事件。在此例中，CC1P=0。  
+在本例中，TIMx_CR1中的DIR和CMS位应该保持0（定时器TIM15/16/17无这两位）。  
+由于只需要一个脉冲，所以设置TIMx_CR1中的OPM=1，当发生更新事件（当计数器从自动重载值返回0时）时计数器自动停止。  
+####特殊情况：OCx快速使能  
