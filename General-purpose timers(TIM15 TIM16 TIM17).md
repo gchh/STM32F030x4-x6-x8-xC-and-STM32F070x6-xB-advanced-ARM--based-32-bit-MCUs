@@ -525,3 +525,31 @@ TIM15定时器能够在几种模式下和一个外部触发同步：复位模式
 ![](https://i.imgur.com/9BiSf68.png)  
 ![](https://i.imgur.com/fhrYTpR.png)  
 ![](https://i.imgur.com/LXuoZsP.png)  
+###TIM15计数器（TIM15_CNT）  
+![](https://i.imgur.com/dviwbyN.png)  
+###TIM15预分频器（TIM15_PSC）  
+![](https://i.imgur.com/aHSX3N5.png)  
+###TIM15自动重载寄存器（TIM15_ARR）  
+![](https://i.imgur.com/tRH5xb6.png)  
+###TIM15重复计数寄存器（TIM15_RCR）  
+![](https://i.imgur.com/cqDFSd6.png)  
+###TIM15捕获/比较寄存器（TIM15_CCR1）  
+![](https://i.imgur.com/3Xj8FQx.png)  
+###TIM15捕获/比较寄存器（TIM15_CCR2）  
+![](https://i.imgur.com/5xemp6v.png)  
+###TIM15刹车和死区寄存器（TIM15_BDTR）  
+![](https://i.imgur.com/lmRbRQI.png)  
+![](https://i.imgur.com/GnRBxbD.png)  
+![](https://i.imgur.com/nU90XIT.png)  
+![](https://i.imgur.com/JdFmq1i.png)  
+![](https://i.imgur.com/Re559YY.png)  
+###TIM15 DMA控制寄存器（TIM15_DCR）  
+![](https://i.imgur.com/ijDa8Tl.png)  
+![](https://i.imgur.com/pgdldZC.png)  
+###TIM15 DMA全传输地址寄存器（TIM15_DMAR）  
+![](https://i.imgur.com/IboOHJF.png)  
+##TIM15寄存器映射  
+![](https://i.imgur.com/yL9QBXm.png)  
+![](https://i.imgur.com/XuMoW7x.png)  
+![](https://i.imgur.com/jPqwR0H.png)  
+![](https://i.imgur.com/GdnDtRf.png)  
