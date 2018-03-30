@@ -435,3 +435,79 @@ TIM15定时器能够在几种模式下和一个外部触发同步：复位模式
 	TIMx->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_TS_2 | TIM_SMCR_TS_0; /* (3) */
 	TIM1->PSC = 47999; /* (4) */
 	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
+计数器按内部时钟正常计数，直到出现TI1上升沿，计数器被清零然后从0开始重新计数。同时，TIMx_SR中的触发标志TIF被置1，并且产生中断或DMA请求（取决于TIMx_DIER中的TIE和TDE的设置）。  
+下图显示了当TIMx_ARR=0x36时，在复位模式下，计数器的行为。从TI1上出现上升沿到计数器实际复位之间的延迟，是由TI1输入上的重新同步电路造成的。  
+![](https://i.imgur.com/S9mPdj2.png)  
+####从模式：门控模式  
+计数器由选中的输入电平启动。  
+在下面的例子中，当TI1输入低电平时计数器向上计数：  
+- 配置通道1检测TI1上的低电平。配置输入滤波带宽（在此例中，不需要滤波，所以保持IC1F=0000）。触发操作不需要捕获预分频器，所以不用配置它。设置TIMx_CCMR1中的CC1S=01，选择TI1作为输入捕获源。设置TIMx_CCER中的CC1P=1，选择低电平。  
+- 设置TIMx_SMCR中的SMS=101，配置定时器为门控模式。设置TIMx_SMCR中的TS=101，选择TI1作为触发输入源。  
+- 设置TIMx_CR1中的CEN=1，使能计数器（在门控模式下，如果CEN=0，无论触发输入的电平如何，计数器都不会启动计数）。  
+######Gated mode code example  
+
+	/* (1) Configure channel 1 to detect low level on the TI1 input
+	       by writing CC1S = ‘01’,
+	       and configure the input filter duration by writing the IC1F[3:0]
+	       bits in the TIMx_CCMR1 register (if no filter is needed, keep IC1F=0000). */
+	/* (2) Select polarity by writing CC1P=1 in the TIMx_CCER register */
+	/* (3) Configure the timer in gated mode by writing SMS=101
+	       Select TI1 as the trigger input source by writing TS=101
+	       in the TIMx_SMCR register. */
+	/* (4) Set prescaler to 12000-1 in order to get an increment each 250us */
+	/* (5) Enable the counter by writing CEN=1 in the TIMx_CR1 register. */
+	TIMx->CCMR1 |= TIM_CCMR1_CC1S_0; /* (1)*/
+	TIMx->CCER |= TIM_CCER_CC1P; /* (2) */
+	TIMx->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_0 | TIM_SMCR_TS_2 | TIM_SMCR_TS_0; /* (3) */
+	TIMx->PSC = 11999; /* (4) */
+	TIMx->CR1 |= TIM_CR1_CEN; /* (5) */  
+当TI1为低电平时，计数器按内部时钟开始计数；当TI1变为高电平时，计数器停止计数。TIMx_SR中的TIF标志在计数器启动或停止时都会被置1。  
+从TI1出现上升沿到计数器实际停止之间的延时，是由TI1输入上的重新同步电路造成的。  
+![](https://i.imgur.com/FZjWx2w.png)  
+####从模式：触发模式  
+计数器由选中的输入事件启动计数。  
+在下面的例子中，计数器在TI2输入上升沿时开始向上计数：  
+- 配置通道2检测TI2上的上升沿。配置输入滤波带宽（在本例中，不需要滤波，所以保持IC2F=0000）。触发操作不使用捕获预分频器，所以不需要配置它。设置TIMx_CCMR1中的CC2S=01，选择TI2作为输入捕获源。设置TIMx_CCER中的CC2P=0，选择上升沿。  
+- 设置TIMx_SMCR中的SMS=110，配置定时器为触发模式。设置TIMx_SMCR中的TS=110，选择TI2作为触发输入源。  
+######Trigger mode code example  
+
+	/* (1) Configure channel 2 to detect rising edge on the TI2 input
+	       by writing CC2S = ‘01’,
+	       and configure the input filter duration by writing the IC1F[3:0] bits
+           in the TIMx_CCMR1 register (if no filter is needed, keep IC1F=0000). */
+	/* (2) Select polarity by writing CC2P=0 (reset value) in the TIMx_CCER register */
+	/* (3) Configure the timer in trigger mode by writing SMS=110
+	       Select TI2 as the trigger input source by writing TS=110
+	       in the TIMx_SMCR register. */
+	/* (4) Set prescaler to 12000-1 in order to get an increment each 250us */
+	TIMx->CCMR1 |= TIM_CCMR1_CC2S_0; /* (1)*/
+	TIMx->CCER &= ~TIM_CCER_CC2P; /* (2) */
+	TIMx->SMCR |= TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1 | TIM_SMCR_TS_2 | TIM_SMCR_TS_1; /* (3) */
+	TIM1->PSC = 11999; /* (4) */  
+当TI2上出现上升沿时，计数器开始按内部时钟计数器，并且TIF标志被置1。  
+从TI2出现上升沿到计数器实际开始计数之间的延时，是由TI2输入上的重新同步电路造成的。  
+![](https://i.imgur.com/YDgmTAH.png)  
+###定时器同步（TIM15）  
+这部分只应用在STM32F030x8,STM32F070xB和STM32F030xC。  
+定时器在内部相连，用于定时器同步或链接。参考General-purpose timer(TIM3)中的Timer synchronization章节，了解详情。  
+###调试模式  
+当MCU进入调试模式（Cortex-M0 core停止），TIMx计数器是继续正常工作还是停止，取决于DBG模块中的DBG_TIMx_STOP的设置。  
+##TIM15寄存器  
+###TIM15控制寄存器1（TIM15_CR1）  
+![](https://i.imgur.com/7RBcOWd.png)  
+![](https://i.imgur.com/z7izMto.png)  
+###TIM15控制寄存器2（TIM15_CR2）  
+![](https://i.imgur.com/saXciEd.png)  
+![](https://i.imgur.com/Hniap0S.png)  
+###TIM15从模式控制寄存器（TIM15_SMCR）  
+![](https://i.imgur.com/8UCNLyQ.png)  
+![](https://i.imgur.com/AOOROqm.png)  
+![](https://i.imgur.com/1h11fZf.png)  
+###TIM15 DMA/中断使能寄存器（TIM15_DIER）  
+![](https://i.imgur.com/OJCSVVh.png)  
+![](https://i.imgur.com/WjOcjP3.png)  
+###TIM15状态寄存器（TIM15_SR）  
+![](https://i.imgur.com/j4tcqhq.png)  
+![](https://i.imgur.com/EisuauJ.png)  
+![](https://i.imgur.com/23ZhSnA.png)  
+###TIM15事件发生寄存器（TIM15_EGR）  
