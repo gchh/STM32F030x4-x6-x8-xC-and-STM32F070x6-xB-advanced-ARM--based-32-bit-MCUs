@@ -511,3 +511,17 @@ TIM15定时器能够在几种模式下和一个外部触发同步：复位模式
 ![](https://i.imgur.com/EisuauJ.png)  
 ![](https://i.imgur.com/23ZhSnA.png)  
 ###TIM15事件发生寄存器（TIM15_EGR）  
+![](https://i.imgur.com/QrUtNl0.png)  
+![](https://i.imgur.com/4Utt8iS.png)  
+###TIM15捕获/比较模式寄存器1（TIM15_CCMR1）  
+![](https://i.imgur.com/elyGzRw.png)  
+![](https://i.imgur.com/GETRiaU.png)  
+![](https://i.imgur.com/QfJ7PXa.png)  
+![](https://i.imgur.com/I1MjKya.png)  
+![](https://i.imgur.com/1rFzOB3.png)  
+![](https://i.imgur.com/nLjxlm3.png)  
+###TIM15捕获/比较使能寄存器（TIM15_CCER）  
+![](https://i.imgur.com/g2kyFEv.png)  
+![](https://i.imgur.com/9BiSf68.png)  
+![](https://i.imgur.com/fhrYTpR.png)  
+![](https://i.imgur.com/LXuoZsP.png)  
