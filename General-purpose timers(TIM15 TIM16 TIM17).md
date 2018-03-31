@@ -553,3 +553,66 @@ TIM15定时器能够在几种模式下和一个外部触发同步：复位模式
 ![](https://i.imgur.com/XuMoW7x.png)  
 ![](https://i.imgur.com/jPqwR0H.png)  
 ![](https://i.imgur.com/GdnDtRf.png)  
+##TIM16和TIM17寄存器  
+###TIM16和TIM17控制寄存器1（TIM16_CR1和TIM17_CR1）  
+![](https://i.imgur.com/9Ps6hQp.png)  
+![](https://i.imgur.com/oRyysqM.png)  
+###TIM16和TIM17控制寄存器2（TIM16_CR2和TIM17_CR2）  
+![](https://i.imgur.com/QfonsrJ.png)  
+![](https://i.imgur.com/iyzBTMg.png)  
+###TIM16和TIM17 DMA/中断使能寄存器（TIM16_DIER和TIM17_DIER）  
+![](https://i.imgur.com/DNrDpn5.png)  
+###TIM16和TIM17状态寄存器（TIM16_SR和TIM17_SR）  
+![](https://i.imgur.com/FHBhi8L.png)  
+![](https://i.imgur.com/htt2qsa.png)  
+###TIM16和TIM17事件发生寄存器（TIM16_EGR和TIM17_EGR）  
+![](https://i.imgur.com/ujGgMFW.png)  
+![](https://i.imgur.com/woeC0ve.png)  
+###TIM16和TIM17捕获/比较模式寄存器1（TIM16_CCMR1和TIM17_CCMR1）  
+![](https://i.imgur.com/yOufGAF.png)  
+![](https://i.imgur.com/EwxYIsM.png)  
+![](https://i.imgur.com/RNugEHo.png)  
+![](https://i.imgur.com/6XASXYV.png)  
+![](https://i.imgur.com/45dTrTH.png)  
+###TIM16和TIM17捕获/比较使能寄存器（TIM16_CCER和TIM17_CCER）  
+![](https://i.imgur.com/N9qVb3i.png)  
+![](https://i.imgur.com/fQ4HtzY.png)  
+![](https://i.imgur.com/JXVAnYg.png)  
+![](https://i.imgur.com/sEynNWj.png)  
+注：和OCx和OCxN通道相连的外部I/O引脚的状态，取决于OCx和OCxN通道的状态，以及GPIO和AFIO寄存器。  
+###TIM16和TIM17计数器（TIM16_CNT和TIM17_CNT）  
+![](https://i.imgur.com/lVM1YBQ.png)  
+###TIM16和TIM17预分频器（TIM16_PSC和TIM17_PSC）  
+![](https://i.imgur.com/7ALflkz.png)  
+###TIM16和TIM17自动重载寄存器（TIM16_ARR和TIM17_ARR）  
+![](https://i.imgur.com/OzbYNHw.png)  
+###TIM16和TIM17重复计数寄存器（TIM16_RCR和TIM17_RCR）  
+![](https://i.imgur.com/LsQgVgx.png)  
+###TIM16和TIM17捕获/比较寄存器1（TIM16_CCR1和TIM17_CCR1）  
+![](https://i.imgur.com/0lp9AHa.png)  
+###TIM16和TIM17刹车和死区寄存器（TIM16_BDTR和TIM17_BDTR）  
+![](https://i.imgur.com/HyJF6R2.png)  
+![](https://i.imgur.com/EgBRfzN.png)  
+![](https://i.imgur.com/itzRLkY.png)  
+![](https://i.imgur.com/KWZ8E2A.png)  
+###TIM16和TIM17 DMA控制寄存器（TIM16_DCR和TIM17_DCR）  
+![](https://i.imgur.com/dkCnmIm.png)  
+###TIM16和TIM17 DMA全传输地址（TIM16_DMAR和TIM17_DMAR）  
+![](https://i.imgur.com/ALfAOQM.png)  
+####如何使用DMA并发操作的例子  
+在本例中使用定时器的DMA并发功能，以半字DMA传输，更新CCRx(x=2,3,4)寄存器。  
+步骤如下：  
+1. 如下配置相应的DMA通道：  
+　- DMA通道外设地址为DMAR寄存器的地址  
+　- DMA通道内存地址是存储DMA传输给CCRx寄存器的数据的RAM缓冲区的地址  
+　- 传输数据个数=3（见下面的注）  
+　- 禁止循环模式  
+2. 配置DCR寄存器，如下：DBL=3次传输，DBA=0xE  
+3. 设置TIMx_DIER中的UDE=1，使能TIMx更新DMA请求  
+4. 使能TIMx  
+5. 使能DMA通道  
+注：在本例中每个CCRx被更新一次。如果每个CCRx寄存器需要更新2次，传输个数应该是6。假设RAM缓冲区包含数据data1,data2,data3,data4,data5,data6。在第一次更新DMA请求时，data1传输给CCR2，data2传输给CCR3，data3传输给CCR4。第二次更新DMA请求时，data4传输给CCR2，data5传输给CCR3，data6传输给CCR4。  
+##TIM16和TIM17寄存器映射  
+![](https://i.imgur.com/sxS9Iav.png)  
+![](https://i.imgur.com/SKUviBB.png)  
+![](https://i.imgur.com/XrnbhuS.png)  
