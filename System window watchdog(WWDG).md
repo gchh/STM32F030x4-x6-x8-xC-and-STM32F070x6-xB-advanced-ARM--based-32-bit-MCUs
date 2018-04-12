@@ -24,4 +24,29 @@ T[5:0]位包含了在发生看门狗复位之前的计数值。复位前的延�
 在一些应用中，EWI中断被用来管理软件系统检测和/或系统恢复/功能退化，而不产生WWDG复位。这种情况下，相应的中断服务程序（ISR）必须重载WWDG计数器，以避免产生复位，然后触发所需的操作。  
 向WWDG_SR写入EWIF=0，可以清除EWI中断。  
 注：例如由于系统锁定在更高优先级的任务中，而无法执行EWI中断时，最终会产生WWDG复位。  
-####如何设置看门狗超时  
+###如何设置看门狗超时  
+可以使用图191中的公式计算WWDG超时。  
+警告：当写WWDG_CR寄存器时，始终置T6位为1，以避免立即发生复位。  
+![](https://i.imgur.com/1OuKJ4F.png)  
+超时计算公式如下：  
+t<sub>WWDG</sub>=t<sub>PCLK</sub>×4096×2<sup>WDGTB[1:0]</sup>×(T[5:0]+1) (ms)  
+其中：  
+t<sub>WWDG</sub>：WWDG超时  
+t<sub>PCLK</sub>：APB时钟周期，以ms为单位  
+4096：WWDG内部分频器的值  
+例如，假定APB时钟频率=48MHz，WDGTB[1:0]=3，T[5:0]=63：  
+t<sub>WWDG</sub>=(1/48000)x4096x8x64=43.69ms  
+参考数据手册，了解t<sub>WWDG</sub>的最小值和最大值。  
+###调试模式  
+当微控制器进入调试模式（ARM Cortex-M0内核停止），WWDG计数器根据DBG模块中的DBG_WWDG_STOP配置位选择是否继续或停止工作。  
+##WWDG寄存器  
+###控制寄存器（WWDG_CR）  
+![](https://i.imgur.com/R7VXR5Z.png)  
+![](https://i.imgur.com/hL7omvC.png)  
+###配置寄存器（WWDG_CFR）  
+![](https://i.imgur.com/uzHo1D6.png)  
+![](https://i.imgur.com/mGavICu.png)  
+###状态寄存器（WWDG_SR）  
+![](https://i.imgur.com/v1hujVr.png)  
+##WWDG寄存器映射  
+![](https://i.imgur.com/u3PHQLs.png)  
