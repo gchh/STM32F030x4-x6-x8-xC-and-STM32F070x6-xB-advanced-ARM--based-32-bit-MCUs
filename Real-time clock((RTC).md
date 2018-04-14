@@ -21,4 +21,30 @@ RTC模块的主要特性如下：
 - 用于事件保存的时间戳功能。  
 - 具有可配置滤波器和内部上拉的入侵检测事件。  
 - 可屏蔽中断/事件：  
-　- 
+　- 闹钟A  
+　- 唤醒中断  
+　- 时间戳  
+　- 入侵检测  
+##RTC实时时钟的实现  
+![](https://i.imgur.com/Iz9T3aH.png)  
+##RTC功能描述  
+###RTC框图  
+![](https://i.imgur.com/IBg39k9.png)  
+![](https://i.imgur.com/CJ0Nt0m.png)  
+![](https://i.imgur.com/eDipvsa.png)  
+![](https://i.imgur.com/vbe9r59.png)  
+RTC包含：  
+- 一个闹钟  
+- 来自IO口的2个入侵事件  
+　- 入侵检测擦除备份寄存器  
+- 来自IO口的一个时间戳事件  
+- 入侵事件检测可以产生一个时间戳事件  
+- 复用功能输出：RTC_OUT可以选择下面2个输出其中之一：  
+　- RTC_CALIB：512Hz或1Hz时钟输出（用32.768kHz的外部LSE时）。可以通过设置RTC_CR寄存器中的COE=1，使能这个输出。  
+　- RTC_ALARM：闹钟A。可以通过配置RTC_CR寄存器中OSEL[1:0]位选择这个输出。  
+- 复位功能输入：  
+　- RTC_TS：时间戳事件  
+　- RTC_TAMP1：入侵事件检测1  
+　- RTC_TAMP2：入侵事件检测2  
+　- RTC_REFIN：50或60Hz参考时钟输入  
+###RTC控制GPIOs  
