@@ -48,3 +48,18 @@ RTC包含：
 　- RTC_TAMP2：入侵事件检测2  
 　- RTC_REFIN：50或60Hz参考时钟输入  
 ###RTC控制GPIOs  
+RTC_OUT,RTC_TS和RTC_TAMP1被映射到同一个引脚PC13上。  
+RTC_ALARM输出的选择通过RTC_TAFCR寄存器如下操作：PC13VALUE位用于选择RTC_ALARM输出配置成推挽或开漏模式。  
+当PC13不用作RTC复用功能时，可以通过设置RTC_TAFCR中的PC13MODE=1，强制其为推挽输出模式，而PC13VALUE位决定其输出值。这种情况下，PC13的推挽输出状态和输出值在待机模式下是可以保持的。  
+PC13的输出机制遵循表63所示的优先级顺序。  
+当PC14和PC15不用作LSE振荡器时，可以通过设置RTC_TAFCR中的PC14MODE=1和PC15MODE=1，强制其为推挽输出模式；其输出值由PC14VALUE和PC15VALUE决定。这种情况下，PC14和PC15的推挽输出状态和输出值在待机模式下是可以保持的。  
+PC14和PC15的输出机制遵循表64和表65所示的优先级顺序。  
+![](https://i.imgur.com/exByiwo.png)  
+![](https://i.imgur.com/ewFCoPq.png)  
+###时钟和预分频器  
+RTC时钟源RTCCLK由时钟控制器在LSE、LSI和HSE时钟之间选择。  
+一个可编程的预分频器产生1Hz的时钟，用于更新日历。为了最大程度的降低功耗，预分频器分割成2个可编程预分频器（参见图192：RTC框图）：  
+- 通过RTC_PRER寄存器的PREDIV_A位配置的7位异步预分频器。  
+- 通过RTC_PRER寄存器的PREDIV_S位配置的15位同步预分频器。  
+注：当2个预分频器都使用时，建议将异步预分频器配置为较高的值，以减少功耗。  
+使用32.768KHz的LSE时钟时，异步分频器的分频系数设为128，同步分频器的分频系数设为256，从而得到1Hz（ck_spre）的内部时钟频率。
