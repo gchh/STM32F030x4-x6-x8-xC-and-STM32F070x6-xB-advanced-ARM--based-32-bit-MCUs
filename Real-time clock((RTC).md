@@ -106,3 +106,88 @@ RTC域复位后，所有RTC寄存器被写保护。向写保护寄存器RTC_WPR�
 2. 向RTC_WPR写入0x53  
 写入错误的关键字将激活写保护。  
 保护机制不受系统复位影响。  
+####日历初始化和配置  
+要编程包括时间格式和预分频器配置在内的初始时间和日期日历值，需要按一下步骤：  
+1. 设置RTC_ISR寄存器中的INIT=1，进入初始化模式；日历计数器停止，并且可更新计数器的值。  
+2. 轮询RTC_ISR中的INITF位。当INITF=1时，进入初始化阶段模式。这需要大概2个RTCCLK时钟周期（由于时钟同步）。  
+3. 编程RTC_PRER寄存器中的2个预分频器的分频系数，产生日历计数器使用的1Hz时钟。  
+4. 向影子寄存器（RTC_TR和RTC_DR）中写入初始时间和日期，并且通过RTC_CR中的FMT位配置时间格式（12或24小时制）。  
+5. 将INIT位清零，退出初始化模式。然后，自动加载日历计数器的实际值，并在4个RTCCLK时钟周期后计数器重新开始计数。  
+当初始化操作完成后，日历开始计时。  
+注：系统复位后，应用程序可以读取RTC_ISR中的INITS位来检查日历是否已经初始化。如果INITS=0，表明日历没有初始化，因为年字段是RTC域复位后的默认值（0x00）。  
+在初始化后要读取日历，必须在RTC_ISR中的RSF=1之后。  
+######RTC calendar configuration code example  
+
+	/* (1) Write access for RTC registers */
+	/* (2) Enable init phase */
+	/* (3) Wait until it is allow to modify RTC register values */
+	/* (4) set prescaler, 40kHz/128 => 312 Hz, 312Hz/312 => 1Hz */
+	/* (5) New time in TR */
+	/* (6) Disable init phase */
+	/* (7) Disable write access for RTC registers */
+	RTC->WPR = 0xCA; /* (1) */
+	RTC->WPR = 0x53; /* (1) */
+	RTC->ISR |= RTC_ISR_INIT; /* (2) */
+	while ((RTC->ISR & RTC_ISR_INITF) != RTC_ISR_INITF) /* (3) */
+	{
+		/* add time out here for a robust application */
+	}
+	RTC->PRER = 0x007F0137; /* (4) */
+	RTC->TR = RTC_TR_PM | Time; /* (5) */
+	RTC->ISR &=~ RTC_ISR_INIT; /* (6) */
+	RTC->WPR = 0xFE; /* (7) */
+	RTC->WPR = 0x64; /* (7) */  
+####夏令时  
+通过RTC_CR中的SUB1H,ADD1H和BKP位管理夏令时。  
+使用SUB1H或ADD1H位，软件可以不通过初始化操作便可以在日历中一次减去一小时或增加一小时。  
+另外，软件可以使用BKP位来记录是否执行过此操作。  
+####编程闹钟  
+要编程或更新可编程闹钟，必须执行类似以下的步骤：  
+1. 清零RTC_CR中的ALRAE位，禁止闹钟A。  
+2. 配置闹钟A寄存器（RTC_ALRMASSR和RTC_ALRMAR）。  
+3. 设置RTC_CR中的ALRAE位为1，重新使能闹钟A。  
+注：由于时钟同步的原因，每次RTC_CR寄存器的改变，要在2个RTCCLK时钟周期后才生效。  
+######RTC alarm configuration code example  
+
+	/* (1) Write access for RTC registers */
+	/* (2) Disable alarm A to modify it */
+	/* (3) Wait until it is allow to modify alarm A value */
+	/* (4) Modify alarm A mask to have an interrupt each 1Hz */
+	/* (5) Enable alarm A and alarm A interrupt */
+	/* (6) Disable write access */
+	RTC->WPR = 0xCA; /* (1) */
+	RTC->WPR = 0x53; /* (1) */
+	RTC->CR &=~ RTC_CR_ALRAE; /* (2) */
+	while ((RTC->ISR & RTC_ISR_ALRAWF) != RTC_ISR_ALRAWF) /* (3) */
+	{
+		/* add time out here for a robust application */
+	}
+	RTC->ALRMAR = RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3
+	            | RTC_ALRMAR_MSK2 | RTC_ALRMAR_MSK1; /* (4) */
+	RTC->CR = RTC_CR_ALRAIE | RTC_CR_ALRAE; /* (5) */
+	RTC->WPR = 0xFE; /* (6) */
+	RTC->WPR = 0x64; /* (6) */  
+####编程唤醒定时器  
+要配置或改变唤醒定时器自动重载值（RTC_WUTR中的WUT[15:0]），需要按照以下步骤：  
+1. 清零RTC_CR中的WUTE位，禁止唤醒定时器。  
+2. 轮询RTC_ISR中的WUTWF位，直到该位为1，以确保访问唤醒自动重载计数器和WUCKSEL[2:0]位被允许。这需要大概2个RTCCLK时钟周期（由于时钟同步）。  
+3. 配置唤醒自动重载值WUT[15:0]，并选择唤醒时钟（RTC_CR中的WUCKSEL[2:0]）。设置RTC_CR中的WUTE为1，重新使能唤醒定时器。唤醒定时器重新向下计数。由于时钟同步的原因，在WUTE清零2个RTCCLK时钟周期之后，WUTWF被清零。  
+######RTC WUT configuration code example  
+
+	/* (1) Write access for RTC registers */
+	/* (2) Disable wake up timerto modify it */
+	/* (3) Wait until it is allow to modify wake up reload value */
+	/* (4) Modify wake upvalue reload counter to have a wake up each 1Hz */
+	/* (5) Enable wake up counter and wake up interrupt */
+	/* (6) Disable write access */
+	RTC->WPR = 0xCA; /* (1) */
+	RTC->WPR = 0x53; /* (1) */
+	RTC->CR &= ~RTC_CR_WUTE; /* (2) */
+	while ((RTC->ISR & RTC_ISR_WUTWF) != RTC_ISR_WUTWF) /* (3) */
+	{
+		/* add time out here for a robust application */
+	}
+	RTC->WUTR = 0x9C0; /* (4) */
+	RTC->CR = RTC_CR_WUTE | RTC_CR_WUTIE; /* (5) */
+	RTC->WPR = 0xFE; /* (6) */
+	RTC->WPR = 0x64; /* (6) */  
