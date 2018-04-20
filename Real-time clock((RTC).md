@@ -257,4 +257,101 @@ F<sub>CAL</sub>=F<sub>RTCCLK</sub> × [1+(256-CALM)/(2<sup>20</sup>+CALM-256)]
 ####验证RTC校准  
 通过测量RTCCLK的精确频率，计算正确的CALM和CALP值，来确保RTC的精确度。提供了一个可选的1Hz输出，允许用户测量和验证RTC精度。  
 在有限的时间间隔内测量RTC的精确频率，可能会导致在测量期间产生最多2个RTCCLK时钟周期的测量误差，取决于数字校准周期与测量周期的对齐方式。  
-但是，如果测量周期和校准周期一样长，此测量误差可以被消除。在此情况下，
+但是，如果测量周期和校准周期一样长，此测量误差可以被消除。在这种情况下，观察到的唯一误差是由于数字校准的分辨率引起的误差。  
+- 默认情况下，校准周期时32秒。  
+在此模式下，测量整个32秒内1Hz输出的精度，可以确保测量误差在0.477ppm内（在32秒内为0.5个RTCCLK周期，受校准分辨率限制）。  
+- RTC_CALR寄存器中的CALW16=1，强制校准周期为16秒。  
+在这种情况下，RTC精度在16秒内测量，最大误差0.954ppm（0.5个RTCCLK相对于16秒）。然而，因为校准分辨率降低，长期RTC的精度也会减少到0.954ppm：当CALW16=1时，CALM[0]保持为0。  
+- RTC_CALR寄存器中的CALW8=1，强制校准周期为8秒。  
+在这种情况下，在8秒内测量RTC精度，误差最大为1.907ppm（0.5个RTCCLK相对于8秒）。长期RTC的精度同样会降到1.907ppm：当CALW8=1时，CALM[1:0]保持为00。  
+####动态重校准（运行中重校准）  
+当RTC_ISR中的INITF=0时，通过以下步骤，校准寄存器RTC_CALR可以实现动态更新（在运行中更新）：  
+1. 轮询RTC_ISR中的RECALPF位（重校准挂起标志）。  
+2. 如果RECALPF=0，根据需要，向RTC_CALR中写入新值。然后RECALPF会自动被置1。  
+3. 在写操作RTC_CALR后的3个ck_apre周期内，新的校准值生效。  
+######RTC calibration code example  
+
+	/* (1) Write access for RTC registers */
+	/* (2) Enable init phase */
+	/* (3) Wait until it is allow to modify RTC register values */
+	/* (4) set prescaler, 40kHz/125 => 320 Hz, 320Hz/320 => 1Hz */
+	/* (5) New time in TR */
+	/* (6) Disable init phase */
+	/* (7) Wait until it's allow to modify calibartion register */
+	/* (8) Set calibration to around +20ppm, which is a standard value @25°C */
+	/* Note: the calibration is relevant when LSE is selected for RTC clock */
+	/* (9) Disable write access for RTC registers */
+	RTC->WPR = 0xCA; /* (1) */
+	RTC->WPR = 0x53; /* (1) */
+	RTC->ISR |= RTC_ISR_INIT; /* (2) */
+	while ((RTC->ISR & RTC_ISR_INITF) != RTC_ISR_INITF) /* (3) */
+	{
+		/* add time out here for a robust application */
+	}
+	RTC->PRER = (124<<16) | 319; /* (4) */
+	RTC->TR = RTC_TR_PM | Time; /* (5) */
+	RTC->ISR &=~ RTC_ISR_INIT; /* (6) */
+	while((RTC->ISR & RTC_ISR_RECALPF) == RTC_ISR_RECALPF) /* (7) */
+	{
+		/* add time out here for a robust application */
+	}
+	RTC->CALR = RTC_CALR_CALP | 482; /* (8) */
+	RTC->WPR = 0xFE; /* (9) */
+	RTC->WPR = 0x64; /* (9) */  
+###时间戳功能  
+RTC_CR寄存器中的TSE=1，使能时间戳功能。  
+当RTC_TS引脚上检测到时间戳事件，日历会保存到时间戳寄存器中（RTC_TSSSR,RTC_TSTR,RTC_TSDR）。  
+当发生时间戳事件，RTC_ISR寄存器中的时间戳标志位TSF被置位。  
+通过设置RTC_CR寄存器中的TSIE=1，当发生时间戳事件时，会产生一个中断。  
+如果在时间戳标志TSF=1时，发生了新的时间戳事件，则时间戳溢出标志TSOVF置位，并且时间戳寄存器（RTC_TSTR和RTC_TSDR）保持前次事件的结果。  
+注：由于同步过程，在发生时间戳事件后2个ck_apre周期，TSF才被置位。  
+而TSOVF置位是不延时的。这意味着如果2次时间戳事件发生的间隔非常短，则可能出现TSF=0而TSOVF=1的情况。因此，建议在TSF被置位后，再查询TSOVF。  
+警告：在TSF位被清除后立刻发生一个时间戳事件，那么TSF和TSOVF位都会被置位。为了避免屏蔽时间戳事件发生在同一时刻，应用不能将TSF写0，除非已经读TFS为1。  
+可选的，一个入侵事件可以导致一个时间戳事件被记录。了解RTC入侵和复用功能配置寄存器（RTC_TAFCR）中的TAMPTS控制位。  
+###入侵检测  
+RTC_TAMPx输入事件可以配置成边沿检测，或带过滤的电平检测。  
+入侵检测可以配置，用于以下目的：  
+- 产生中断，从停机和待机模式中唤醒。  
+####入侵检测初始化  
+设置RTC_TAFCR寄存器中的TAMPxE=1，可以使能每一个入侵检测输入。  
+每个RTC_TAMPx入侵检测输入对应一个在RTC_ISR中的标志TAMPxF。  
+在引脚上发生入侵事件，并经过如下时长的等待后，TAMPxF标志置位：  
+- 当TAMPFLT≠0x0（带滤波的电平检测）时，3个ck_apre  
+- 当TAMPTS=1（入侵事件时间戳）时，3个ck_apre  
+- 当TAMPFLT=0x0（边沿检测）并且TAMPTS=0时，无延时  
+在此期间并且一旦TAMPxF被置1，发生在同一引脚上的新的入侵就不能被检测。  
+设置RTC_TAFCR寄存器中的TAMPIE=1，当入侵检测事件发生时，会产生一个中断。  
+####入侵事件的时间戳  
+当TAMPTS=1，任何入侵事件发生都会引起一个时间戳事件发生。在这种情况下，和正常发生时间戳事件一样，RTC_ISR中的TSF或TSOVF被置位。在TSF或TSOVF置位的同时，受影响的入侵标志TAMPxF也被置位。  
+####入侵输入的边沿检测  
+如果TAMPFLT=00，根据相应的TAMPxTRG位，当RTC_TAMPx引脚上出现上升沿或下降沿时，产生入侵检测事件。当选择边沿检测时，RTC_TAMPx输入上的内部上拉电阻会被禁用。  
+警告：为了避免丢失入侵检测事件，用于边沿检测的信号和相应的TAMPxE位进行逻辑与，以便在RTC_TAMPx引脚使能前检测到入侵检测事件。  
+- 当TAMPxTRG=0：如果在入侵检测使能（TAMPxE=1）前，RTC_TAMPx引脚已经是高电平，一旦RTC_TAMPx输入被使能，就会检测到一个入侵事件，即使在TAMPxE被置1后没有出现上升沿。  
+- 当TAMPxTRG=1：如果在入侵检测使能前，RTC_TAMPx已经是低电平，那么一旦RTC_TAMPx输入被使能，则会产生一个入侵事件（即使TAMPxE=1之后没有下降沿出现在RTC_TAMPx输入上）。  
+####RTC_TAMPx输入的带滤波电平检测  
+通过设置TAMPFLT≠0，执行带滤波的电平检测。当2个、4个或8个连续采样都为TAMPxTRG位所配置的有效电平，则产生一个入侵检测事件。  
+在RTC_TAMPx输入的状态被采样前，将通过I/O内部上拉电阻对其预充电；除非设置TAMPPUDIS=1将其禁止。预充电持续时间由TAMPPRCH位确定，允许增大RTC_TAMPx输入上的电容。  
+可以使用TAMPFREQ确定电平检测的采样频率，以优化入侵检测延迟与上拉电阻产生的功耗之间的权衡。  
+######RTC tamper and time stamp configuration code example   
+
+	/* Tamper configuration:
+	   - Disable precharge (PU)
+	   - RTCCLK/256 tamper sampling frequency
+	   - Activate time stamp on tamper detection
+	   - input rising edge trigger detection on RTC_TAMP2 (PA0)
+	   - Tamper interrupt enable */
+	RTC->TAFCR = RTC_TAFCR_TAMPPUDIS | RTC_TAFCR_TAMPFREQ | RTC_TAFCR_TAMPTS
+	           | RTC_TAFCR_TAMP2E | RTC_TAFCR_TAMPIE;  
+
+######RTC tamper and time stamp code example  
+
+	/* Check tamper and timestamp flag */
+	if (((RTC->ISR & (RTC_ISR_TAMP2F)) == (RTC_ISR_TAMP2F))
+	    && ((RTC->ISR & (RTC_ISR_TSF)) == (RTC_ISR_TSF)))
+	{
+		RTC->ISR &= ~RTC_ISR_TAMP2F; /* clear tamper flag */
+		EXTI->PR = EXTI_PR_PR19; /* clear exti line 19 flag */
+		TimeToCompute = RTC->TSTR; /* get tamper time in timestamp register */
+		RTC->ISR &= ~RTC_ISR_TSF; /* clear timestamp flag */
+	}  
+###校准时钟输出  
