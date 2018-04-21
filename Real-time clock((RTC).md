@@ -447,3 +447,20 @@ RTC_DR是日历日期影子寄存器，只能在初始化模式下写入，并�
 ![](https://i.imgur.com/Qudm6q8.png)  
 ![](https://i.imgur.com/gEYobvT.png)  
 ###RTC入侵和复用功能配置寄存器（RTC_TAFCR）  
+![](https://i.imgur.com/9SHeQJs.png)  
+![](https://i.imgur.com/FWpWPzR.png)  
+![](https://i.imgur.com/hhDHVUk.png)  
+![](https://i.imgur.com/zHHp9bA.png)  
+![](https://i.imgur.com/EN5g6FF.png)  
+![](https://i.imgur.com/1iaYez8.png)  
+![](https://i.imgur.com/QHTo8BN.png)  
+###RTC闹钟A亚秒寄存器（RTC_ALRMASSR）  
+该寄存器只能在RTC_CR寄存器中的ALRAE=0时或初始化模式下，被写入。该寄存器受写保护。  
+![](https://i.imgur.com/efx5Cos.png)  
+![](https://i.imgur.com/xvgLalN.png)  
+##RTC寄存器映射  
+![](https://i.imgur.com/ZP2HxRM.png)  
+![](https://i.imgur.com/S64ewdN.png)  
+![](https://i.imgur.com/riUoV9p.png)  
+![](https://i.imgur.com/Ap5QIyM.png)  
+![](https://i.imgur.com/cnUY9OW.png)  
