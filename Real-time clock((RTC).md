@@ -355,3 +355,95 @@ RTC_TAMPx输入事件可以配置成边沿检测，或带过滤的电平检测�
 		RTC->ISR &= ~RTC_ISR_TSF; /* clear timestamp flag */
 	}  
 ###校准时钟输出  
+当RTC_CR寄存器中的COE位置1，在RTC_CALIB器件输出上提供一个参考时钟。  
+如果RTC_CR寄存器中的COSEL位为0并且PREDIV_A=0x7F，则RTC_CALIB频率是f<sub>RTCCLK</sub>/64。这相当于RTCCLK频率是32.768kHz时，校准输出是512Hz。RTC_CALIB占空比是不规则的：在下降沿上有轻微的抖动，因此建议使用上升沿。  
+当COSEL=1并且PREDIV_S+1是256的非零整数倍（例如，PREDIV_S[7:0]=0xFF），则RTC_CALIB频率是f<sub>RTCCLK</sub>/(256×(PREDIV_A+1))。这相当于RTCCLK频率是32.768kHz时，默认预分频器值（PREDIV_A=0x7F,PREDIV_S=0xFF）下，校准输出是1Hz。1Hz输出会受到移位正在进行的操作的影响，并可能在移位操作期间（SHPF=1）发生跳变。  
+注：当RTC_CALIB或RTC_ALARM输出被选择，RTC_OUT引脚自动配置成输出复用功能。  
+当COSEL位被清零，RTC_CALIB输出是异步预分频器的第六级输出。  
+当COSEL位被置位，RTC_CALIB输出是同步预分频器的第8级输出。  
+######RTC clock output code example  
+
+    /* (1) Write access for RTC registers */
+    /* (2) Disable alarm A to modify it */
+    /* (3) Wait until it is allow to modify alarm A value */
+    /* (4) Modify alarm A mask to have an interrupt each 1Hz */
+    /* (5) Enable alarm A and alarm A interrupt, enable calibration output (1Hz) */
+    /* (6) Disable write access */
+    RTC->WPR = 0xCA; /* (1) */
+    RTC->WPR = 0x53; /* (1) */
+    RTC->CR &=~ RTC_CR_ALRAE; /* (2) */
+    while ((RTC->ISR & RTC_ISR_ALRAWF) != RTC_ISR_ALRAWF) /* (3) */
+    {
+        /* add time out here for a robust application */
+    }
+    RTC->ALRMAR = RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK2 | RTC_ALRMAR_MSK1; /* (4) */
+    RTC->CR = RTC_CR_ALRAIE | RTC_CR_ALRAE | RTC_CR_COE | RTC_CR_COSEL; /* (5) */
+    RTC->WPR = 0xFE; /* (6) */
+    RTC->WPR = 0x64; /* (6) */  
+###闹钟输出  
+使用RTC_CR寄存器中的OSEL[1:0]控制位使能RTC_ALARM闹钟复用功能输出，并选择输出功能。这些功能反映了RTC_ISR寄存器中相应标志的内容。  
+输出极性由RTC_CR中的POL控制位决定，这样当POL=1时，输出极性和选定的标志位相反。  
+####闹钟复用功能输出  
+通过RTC_TAFCR寄存器中的ALARMOUTTYPE控制位，RTC_ALARM引脚可以被配置成开漏或推挽输出。（可实际上没有这个控制位呀？）  
+注：一旦RTC_ALARM输出被使能，其优先级高于RTC_CALIB（不管COE位如何，且必须保持清除）。  
+当RTC_CALIB或RTC_ALARM输出被选择，RTC_OUT引脚自动配置成输出复用功能。  
+##RTC低功耗模式  
+![](https://i.imgur.com/8O7133q.png)  
+##RTC中断  
+所有RTC中断被连接欸到NVIC控制器上。  
+使能RTC中断，需要执行下列步骤：  
+1. 配置对应RTC事件的NVIC线为中断模式并将其使能，选择上升沿有效。  
+2. 配置并使能NVIC中的RTC_IRQ通道。  
+3. 配置RTC产生RTC中断。  
+![](https://i.imgur.com/EG1tMST.png)  
+##RTC寄存器  
+###RTC时间寄存器（RTC_TR）  
+RTC_TR是日历时间影子寄存器，只能在初始化模式下写入。该寄存器被写保护。  
+![](https://i.imgur.com/2yiOTUW.png)  
+###RTC日期寄存器（RTC_DR）  
+RTC_DR是日历日期影子寄存器，只能在初始化模式下写入，并且受到写保护。  
+![](https://i.imgur.com/QDW8YmB.png)  
+![](https://i.imgur.com/te07pLq.png)  
+###RTC控制寄存器（RTC_CR）  
+![](https://i.imgur.com/etEGQRk.png)  
+![](https://i.imgur.com/6xpxOpS.png)  
+![](https://i.imgur.com/HhnNKkc.png)  
+![](https://i.imgur.com/GvGjEFy.png)  
+![](https://i.imgur.com/wkDCFub.png)  
+###RTC初始化和状态寄存器（RTC_ISR）  
+该寄存器受写保护（除了RTC_ISR[13:8]位）。  
+![](https://i.imgur.com/OsC2C4Y.png)  
+![](https://i.imgur.com/QwQNoov.png)  
+![](https://i.imgur.com/MJPnWI8.png)  
+![](https://i.imgur.com/LP3UID0.png)  
+###RTC预分频器寄存器（RTC_PRER）  
+该寄存器只能在初始化模式下写入，并且必须执行两次独立的写访问来初始化。该寄存器受写保护。  
+![](https://i.imgur.com/Bfm14Nf.png)  
+###RTC唤醒定时器寄存器（RTC_WUTR）  
+该寄存器只有当RTC_ISR中的WUTWF=1时，才能写入。该寄存器受写保护。  
+![](https://i.imgur.com/CCwXlCG.png)  
+###RTC闹钟A寄存器（RTC_ALRMAR）  
+该寄存器只有当RTC_ISR中的ALRAWF=1时，或在初始化模式时，才能写入。该寄存器受写保护。  
+![](https://i.imgur.com/YYPVGHM.png)  
+![](https://i.imgur.com/558vIhF.png)  
+###RTC写保护寄存器（RTC_WPR）  
+![](https://i.imgur.com/1fqtMeq.png)  
+###RTC亚秒寄存器（RTC_SSR）  
+![](https://i.imgur.com/kO1braM.png)  
+###RTC移位控制寄存器（RTC_SHIFTR）  
+该寄存器受写保护。  
+![](https://i.imgur.com/R928mDW.png)  
+###RTC时间戳时间寄存器（RTC_TSTR）  
+该寄存器的内容只在RTC_ISR中的TSF=1时才有效；当TSF复位时，该寄存器被清零。  
+![](https://i.imgur.com/31fFEH1.png)  
+###RTC时间戳日期寄存器（RTC_TSDR）  
+该寄存器的内容只在RTC_ISR中的TSF=1时才有效；当TSF复位时，该寄存器被清零。  
+![](https://i.imgur.com/Zr2NfBZ.png)  
+###RTC时间戳亚秒寄存器（RTC_TSSSR）  
+该寄存器的内容只在RTC_ISR中的TSF=1时才有效；当TSF复位时，该寄存器被清零。  
+![](https://i.imgur.com/jmUUy6a.png)  
+###RTC校准寄存器（RTC_CALR）  
+该寄存器受写保护。  
+![](https://i.imgur.com/Qudm6q8.png)  
+![](https://i.imgur.com/gEYobvT.png)  
+###RTC入侵和复用功能配置寄存器（RTC_TAFCR）  
