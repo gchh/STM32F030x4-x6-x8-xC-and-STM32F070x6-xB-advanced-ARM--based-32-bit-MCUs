@@ -384,7 +384,7 @@ RTC_TAMPx输入事件可以配置成边沿检测，或带过滤的电平检测�
 使用RTC_CR寄存器中的OSEL[1:0]控制位使能RTC_ALARM闹钟复用功能输出，并选择输出功能。这些功能反映了RTC_ISR寄存器中相应标志的内容。  
 输出极性由RTC_CR中的POL控制位决定，这样当POL=1时，输出极性和选定的标志位相反。  
 ####闹钟复用功能输出  
-通过RTC_TAFCR寄存器中的ALARMOUTTYPE控制位，RTC_ALARM引脚可以被配置成开漏或推挽输出。（可实际上没有这个控制位呀？）  
+通过RTC_TAFCR寄存器中的ALARMOUTTYPE控制位，RTC_ALARM引脚可以被配置成开漏或推挽输出。（可实际上没有这个控制位呀？就是PC13VALUE）  
 注：一旦RTC_ALARM输出被使能，其优先级高于RTC_CALIB（不管COE位如何，且必须保持清除）。  
 当RTC_CALIB或RTC_ALARM输出被选择，RTC_OUT引脚自动配置成输出复用功能。  
 ##RTC低功耗模式  
@@ -392,7 +392,7 @@ RTC_TAMPx输入事件可以配置成边沿检测，或带过滤的电平检测�
 ##RTC中断  
 所有RTC中断被连接欸到NVIC控制器上。  
 使能RTC中断，需要执行下列步骤：  
-1. 配置对应RTC事件的NVIC线为中断模式并将其使能，选择上升沿有效。  
+1. 配置对应RTC事件对应的EXTI线为中断模式并将其使能，选择上升沿有效。  
 2. 配置并使能NVIC中的RTC_IRQ通道。  
 3. 配置RTC产生RTC中断。  
 ![](https://i.imgur.com/EG1tMST.png)  
