@@ -37,3 +37,24 @@ I<sup>2</sup>C总线接口处理微控制器和串行I<sup>2</sup>C总线间的�
 该接口也可以通过一个数据引脚SDA和一个时钟引脚SCL连接到SMBus。  
 如果支持SMBus功能：还可以使用过额外可选的SMBus报警引脚SMBA。  
 ###I<sup>2</sup>C框图  
+![](https://i.imgur.com/T0Ns2YL.png)  
+I2C由独立时钟源提供时钟，使其能独立于PCLK工作。  
+独立时钟源可以在下列2个时钟源中选择：  
+- HSI：内部高速时钟（默认）  
+- SYSCLK：系统时钟  
+I2C的I/O口支持20mA输出电流驱动以适应超快速模式的操作。通过设置SYSCFG_CFGR1寄存器中的SCL和SDA驱动能力控制位来使能。  
+###I<sup>2</sup>C2框图  
+![](https://i.imgur.com/2tNS6z4.png)  
+###I2C时钟要求  
+I2C内核时钟由I2CCLK提供。  
+I2CCLK的周期t<sub>I2CCLK</sub>必须满足以下条件：  
+t<sub>I2CCLK</sub> < (t<sub>LOW</sub>-t<sub>filters</sub>)/4并且t<sub>I2CCLK</sub> < t<sub>HIGH</sub>  
+其中：  
+t<sub>LOW</sub>：SCL低电平时间  
+t<sub>HIGH</sub>：SCL高电平时间  
+t<sub>filters</sub>：滤波器使能时，由模拟和数字滤波器引起的延时的总和。模拟滤波器最大延时是260ns。数字滤波器延时是DNF×t<sub>I2CCLK</sub>。  
+PCLK时钟周期t<sub>PCLK</sub>必须满足下列条件：  
+t<sub>PCLK</sub> < 4/3 t<sub>SCL</sub>  
+其中t<sub>SCL</sub>：SCL周期  
+警告：当I2C内核时钟有PCLK提供时，PCLK必须满足t<sub>I2CCLK</sub>的条件。  
+###模式选择  
