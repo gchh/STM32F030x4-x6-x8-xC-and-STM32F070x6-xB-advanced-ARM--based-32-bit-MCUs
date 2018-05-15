@@ -85,3 +85,17 @@ I2C外设时钟必须由时钟控制器配置和使能。
 在主模式和从模式下，都必须配置时序，以确保正确的数据保持和建立时间。这由I2C_TIMINGR寄存器中的PRESC[3:0]、SCLDEL[3:0]和SDADEL[3:0]位进行配置。  
 STM32CubeMX工具在I2C配置窗口中计算并提供I2C_TIMINGR的内容。  
 ![](https://i.imgur.com/mKNyyHb.png)  
+- 当SCL下降沿被内部检测到，在发送SDA输出前会插入一段延时。这个延时t<sub>SDADEL</sub>=SDADEL×t<sub>PRESC</sub>+t<sub>I2CCLK</sub>，其中t<sub>PRESC</sub>=(PRESC+1)×t<sub>I2CCLK</sub>。  
+T<sub>SDADEL</sub>会影响数据保持时间t<sub>HD;DAT</sub>。  
+SDA输出总延时：  
+t<sub>SYNC1</sub>+{[SDADEL×(PRESC+1)+1]×t<sub>I2CCLK</sub>}  
+t<sub>SYNC1</sub>持续时间取决于下面的参数：  
+- SCL下降沿斜率  
+- 使能模拟滤波器，带来的输入延时：t<sub>AF(min)</sub>＜t<sub>AF</sub>＜t<sub>AF(max)</sub>ns。  
+- 使能数字滤波器，带来的输入延时：t<sub>DNF</sub>=DNF×t<sub>I2CCLK</sub>。  
+- SCL与I2CCLK建立同步引起的延时（2到3个I2CCLK周期）。  
+为了桥接SCL下降沿的未定义区域，必须遵循如下条件配置SDADEL：  
+{t<sub>f(max)</sub>+t<sub>HD;DAT(min)</sub>-t<sub>AF(max)</sub>-[(DNF+3)×t<sub>I2CCLK</sub>]}/{(PRESC+1)×t<sub>I2CCLK</sub>}≤SDADEL  
+SDADEL≤{t<sub>HD;DAT(max)</sub>-t<sub>AF(max)</sub>-[(DNF+4)×t<sub>I2CCLK</sub>]}/{(PRESC+1)×t<sub>I2CCLK</sub>}  
+注：只有使能模拟滤波器后，公式中才包含t<sub>AF(min)</sub>和t<sub>AF(max)</sub>。参考器件数据手册了解t<sub>AF</sub>的值。  
+t<sub>HD;DAT</sub>的最大值是3.45us，0.9us和0.45us分别对应标准模式，快速模式和超快模式；但是必须比t<sub>VD;DAT</sub>的最大值少一个跳变时间。该最大值只有器件不延长SCL信号的低电平周期（t<sub>LOW</sub>）时才能得到。如果时钟延长SCL，数据必须在建立时间内保持有效，之后才能释放时钟。  
