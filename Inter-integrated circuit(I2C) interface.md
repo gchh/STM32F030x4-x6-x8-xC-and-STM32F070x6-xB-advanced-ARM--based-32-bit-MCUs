@@ -84,3 +84,4 @@ I2C外设时钟必须由时钟控制器配置和使能。
 ####I2C时序  
 在主模式和从模式下，都必须配置时序，以确保正确的数据保持和建立时间。这由I2C_TIMINGR寄存器中的PRESC[3:0]、SCLDEL[3:0]和SDADEL[3:0]位进行配置。  
 STM32CubeMX工具在I2C配置窗口中计算并提供I2C_TIMINGR的内容。  
+![](https://i.imgur.com/mKNyyHb.png)  
