@@ -99,3 +99,41 @@ t<sub>SYNC1</sub>持续时间取决于下面的参数：
 SDADEL≤{t<sub>HD;DAT(max)</sub>-t<sub>AF(max)</sub>-[(DNF+4)×t<sub>I2CCLK</sub>]}/{(PRESC+1)×t<sub>I2CCLK</sub>}  
 注：只有使能模拟滤波器后，公式中才包含t<sub>AF(min)</sub>和t<sub>AF(max)</sub>。参考器件数据手册了解t<sub>AF</sub>的值。  
 t<sub>HD;DAT</sub>的最大值是3.45us，0.9us和0.45us分别对应标准模式，快速模式和超快模式；但是必须比t<sub>VD;DAT</sub>的最大值少一个跳变时间。该最大值只有器件不延长SCL信号的低电平周期（t<sub>LOW</sub>）时才能得到。如果时钟延长SCL，数据必须在建立时间内保持有效，之后才能释放时钟。  
+SDA上升沿通常很糟糕时，SDADEL的计算公式变为：  
+SDADEL≤{t<sub>VD;DAT(max)</sub>-t<sub>r(max)</sub>-260ns-[(DNF+4)×t<sub>I2CCLK</sub>]}/{(PRESC+1)×t<sub>I2CCLK</sub>}  
+注：当NOSTRETCH=0时，改条件会不成立。这是因为器件会根据SCLDEL的值来延长SCL低电平时间以保证建立时间。  
+参考表71：I2C-SMBUS规范数据建立和保持时间，了解t<sub>f</sub>,t<sub>r</sub>,t<sub>HD;DAT</sub>和t<sub>VD;DAT</sub>的标准值。  
+- 在延时t<sub>SDADEL</sub>，或发送SDA输出后，从机可能不得不延长时钟，因为数据还没有写入I2C_TXDR寄存器中，SCL在建立时间内保持低电平。建立时间t<sub>SCLDEL</sub>=(SCLDEL+1)×t<sub>PRESC</sub>其中t<sub>PRESC</sub>=(PRESC+1)×t<sub>I2CCLK</sub>。  
+t<sub>SCLDEL</sub>会影响建立时间t<sub>SU;DAT</sub>。  
+为了桥接SDA跳变（上升沿通常为最差的情况）产生的未定义区域，用户必须编程SCLDEL满足以下条件：  
+{[t<sub>r(max)</sub>+t<sub>SU;DAT(min)</sub>]/[(PRESC+1)×t<sub>I2CCLK</sub>]}-1 <= SCLDEL  
+参考表71：I2C-SMBUS规范数据建立和保持时间，了解t<sub>r</sub>和t<sub>SU;DAT</sub>的标准值。  
+使用的SDA和SCL跳变时间值是应用中的值。使用最大值而非标准值会增加SDADEL和SCLDEL计算的约束条件，但能确保任何应用的特性。  
+注：在每个时钟脉冲，SCL下降沿被检测到后，I2C主机或从机在接收或发送模式下要延长SCL低电平至少[(SDADEL+SCLDEL+1)×(PRESC+1)+1]×t<sub>I2CCLK</sub>。在发送模式，为了防止SDADEL计数结束而数据还没有写入I2C_TXDR，I2C保持延长SCL低电平直到下次数据写入。然后新的数据MSB发送到SDA输出上，并且SCLDEL开始计数，继续延长SCL低电平以保证数据建立时间。  
+如果在从模式NOSTRETCH=1，SCL不会被延长。因此SDADEL必须以保证足够的建立时间的方式编程。  
+![](https://i.imgur.com/zpzEtvU.png)  
+另外，在主模式下，SCL时钟的高和低电平必须通过I2C_TIMINGR寄存器中的PRESC[3:0],SCLH[7:0]和SCLL[7:0]来配置。  
+- 当内部检测到SCL下降沿，在释放SCL输出前会插入一段延时。这段延时t<sub>SCLL</sub>=(SCLL+1)×t<sub>PRESC</sub>其中t<sub>PRESC</sub>=(PRESC+1)×t<sub>I2CCLK</sub>。t<sub>SCLL</sub>影响SCL低电平时间t<sub>LOW</sub>。  
+- 当内部检测到SCL上升沿，在强置SCL输出低电平前会插入一段延时。这段延时t<sub>SCLH</sub>=(SCLH+1)×t<sub>PRESC</sub>其中t<sub>PRESC</sub>=(PRESC+1)×t<sub>I2CCLK</sub>。t<sub>SCLH</sub>影响SCL高电平时间t<sub>HIGH</sub>。  
+参考I2C主机初始化，了解详情。  
+警告：I2C使能后，不允许更改时序配置。  
+I2C从机NOSTRETCH模式必须在外设使能前配置。详见I2C从机初始化。  
+警告：I2C使能后，不能更改NOSTRETCH的配置。  
+![](https://i.imgur.com/X5ia8Pa.png)  
+###软件复位  
+将I2C_CR1中的PE位清零，会执行软件复位。这种情况下，I2C的SCL和SDA被释放。内部状态机复位，并且通信控制位和状态位恢复为其复位值。但是，配置寄存器不受影响。  
+下面列出了受影响的寄存器位：  
+1. I2C_CR2寄存器：START,STOP,NACK  
+2. I2C_ISR寄存器：BUSY,TXE,TXIS,RXNE,ADDR,NACKF,TCR,TC,STOPF,BERR,ARLO,OVR  
+支持SMBus功能时，还会影响到下列寄存器位：  
+1. I2C_CR2寄存器：PECBYTE  
+2. I2C_ISR寄存器：PECERR,TIMEOUT,ALERT  
+PE必须保持为0至少3个APB时钟周期，以执行软件复位。遵循下面的软件顺序可以确保这一点：-写PE=0-检查PE=0-写PE=1。  
+###数据传输  
+数据传输由发送和接收数据寄存器以及移位寄存器来管理。  
+####接收   
+SDA输入填充移位寄存器。在第8个SCL脉冲后（当接收到完整的数据字节时），如果I2C_RXDR寄存器是空的（RXNE=0），移位寄存器的值会被拷贝到I2C_RXDR寄存器中。如果RXNE=1，意味着前面接收到数据还没有被读出，SCL被延长低电平直到I2C_RXDR被读取。在SCL第8个和第9个脉冲之间插入延时（应答脉冲之前）。  
+![](https://i.imgur.com/ikFPs1y.png)  
+####发送  
+如果I2C_TXDR寄存器不为空（TXE=0），其内容将在第9个SCL脉冲（应答脉冲）后被拷贝到移位寄存器。然后移位寄存器的内容被移出到SDA线上。如果TXE=1，意味着I2C_TXDR中没有数据，SCL延长低电平直到I2C_TXDR被写入。这个延时是在第9个SCL脉冲后。  
+![](https://i.imgur.com/intDJC0.png)  
