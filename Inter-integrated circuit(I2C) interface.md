@@ -202,7 +202,47 @@ I2C硬件中有一个内嵌的字节计数器，可以在各种模式下管理�
 - 该数据可以是上一次传输信息的最后一个TXIS事件中写入的数据。  
 - 如果这个数据字节不是要发送的那个，可以通过设置TXE=1来清空I2C_TXDR，以写入新的数据字节。STOPF位必须在这些操作后才能被清零，以保证这些操作紧跟地址应答但在第一次数据传输开始前被执行。  
 如果当第一次数据传输开始后STOPF位仍为1，将产生下溢错误（OVR标志置1）。  
-如果需要一个TXIS事件（发送中断或DAM请求），用户必须将TXE位和TXIS位都置1，才会产生TXIS事件。  
+如果需要一个TXIS事件（发送中断或DMA请求），用户必须将TXE位和TXIS位都置1，才会产生TXIS事件。  
 ![](https://i.imgur.com/9BvxAsi.png)  
 ![](https://i.imgur.com/gaB78XM.png)  
 ![](https://i.imgur.com/6Du5zUl.png)  
+######I2C slave transmitter code example  
+
+    uint32_t I2C_InterruptStatus = I2C1->ISR; /* Get interrupt status */
+    /* Check address match */
+    if ((I2C_InterruptStatus & I2C_ISR_ADDR) == I2C_ISR_ADDR)
+    {
+        I2C1->ICR |= I2C_ICR_ADDRCF; /* Clear address match flag */
+        /* Check if transfer direction is read (slave transmitter) */
+        if ((I2C1->ISR & I2C_ISR_DIR) == I2C_ISR_DIR)
+        {
+            I2C1->CR1 |= I2C_CR1_TXIE; /* Set transmit IT */
+        }
+    }
+    else if ((I2C_InterruptStatus & I2C_ISR_TXIS) == I2C_ISR_TXIS)
+    {
+        I2C1->CR1 &=~ I2C_CR1_TXIE; /* Disable transmit IT */
+        I2C1->TXDR = I2C_BYTE_TO_SEND; /* Byte to send */
+    }  
+####从接收器  
+当I2C_RXDR装满时，I2C_ISR中的RXNE被置1。当读取I2C_RXDR时，RXNE被清零。  
+当收到停止位并且I2C_CR1中的STOPIE=1时，I2C_ISR中的STOPF位被置1，并产生中断。  
+![](https://i.imgur.com/mWb7cx8.png)  
+![](https://i.imgur.com/NIblP7H.png)  
+![](https://i.imgur.com/ev3Jv3T.png)  
+######I2C slave receiver code example  
+
+    uint32_t I2C_InterruptStatus = I2C1->ISR; /* Get interrupt status */
+    if ((I2C_InterruptStatus & I2C_ISR_ADDR) == I2C_ISR_ADDR)
+    {
+        I2C1->ICR |= I2C_ICR_ADDRCF; /* Address match event */
+    }
+    else if ((I2C_InterruptStatus & I2C_ISR_RXNE) == I2C_ISR_RXNE)
+    {
+        /* Read receive register, will clear RXNE flag */
+        if (I2C1->RXDR == I2C_BYTE_TO_SEND)
+        {
+            /* Process */
+        }
+    }  
+###I2C主模式  
