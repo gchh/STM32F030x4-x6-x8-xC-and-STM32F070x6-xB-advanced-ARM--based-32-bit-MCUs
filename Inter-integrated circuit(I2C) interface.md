@@ -170,3 +170,39 @@ I2C硬件中有一个内嵌的字节计数器，可以在各种模式下管理�
 - 在从字节控制模式和重载模式下（SBC=1,RELOAD=1），当TCR=1时，这意味着最后的数据已经被发送。当通过向NBYTES[7:0]中写入非零值将TCR清零时，该延长被释放。  
 - 在SCL下降沿被检测到后，I2C延长SCL低电平时间[(SDADEL+SCLDEL+1)×(PRESC+1)+1]×t<sub>I2CCLK</sub>这么长。  
 ####不带时钟延长的从模式（NOSTRETCH=1）  
+当I2C_CR1寄存器中的NOSTRETCH=1时，I2C从机不会延长SCL信号。  
+- 当ADDR标志被置1时，SCL时钟不会被延长。  
+- 发送时，必须在对应于其传输的第一个SCL脉冲出现之前，向I2C_TXDR中写入数据。否则，会发生下溢，I2C_ISR中的OVR标志被置1，如果I2C_CR1中的ERRIE=1，还将产生中断。当第一次数据传输开始而STOPF位依然为1（还没被清零）时，OVR标志也会被置1。因此，如果在写入下一次发送的第一个数据之后才清除上一次传输的STOPF标志，则必须确保OVR的状态符合条件，即使对于第一个要发送的数据。  
+- 在接收时，必须在下一个数据字节的第9个SCL脉冲（ACK脉冲）出现之前读取I2C_RXDR中的数据。否则，会发生上溢，I2C_ISR中的OVR标志被置1，并且如果I2C_CR1中的ERRIE=1，还将产生中断。  
+####从机字节控制模式  
+为了在从接收模式下实现字节ACK控制，必须通过I2C_CR1中的SBC位置1使能从机字节控制模式。这样才能与SMBus标准兼容。  
+为了在从接收模式下实现字节ACK控制，也必须选择重载模式（RELOAD=1）。要控制每一个字节，必须在ADDR中断子程序中将NBYTES初始化为0x01，并且在每接收一个字节后将NBYTES重载为0x01。接收到字节后，TCR为将被置1，延长第8个和第9个SCL脉冲间的低电平。用户可以从I2C_RXDR中读取数据，然后决定是否对其应答（配置I2C_CR2中的ACK位）。通过向NBYTES写入非零值释放SCL延长：发送应答或不应答信号，然后接收下一个字节。  
+可以向NBYTES写入大于0x01的值，在这种情况，会连续接收NBYTES个数据。  
+注：配置SBC位必须在一下情况：I2C未使能，从机没有被寻址到，或ADDR=1。  
+警告：从机字节控制模式和不带时钟延长模式，两者不兼容。当NOSTRETCH=1时不允许置位SBC。  
+![](https://i.imgur.com/d3bsxUI.png)  
+######I2C configured in slave mode code example  
+
+    /* (1) Timing register value is computed with the AN4235 xls file,
+           fast Mode @400kHz with I2CCLK = 48MHz, rise time = 140ns, fall time = 40ns */
+    /* (2) Periph enable, address match interrupt enable */
+    /* (3) 7-bit address = 0x5A */
+    /* (4) Enable own address 1 */
+    I2C1->TIMINGR = (uint32_t)0x00B00000; /* (1) */
+    I2C1->CR1 = I2C_CR1_PE | I2C_CR1_ADDRIE; /* (2) */
+    I2C1->OAR1 |= (uint32_t)(I2C1_OWN_ADDRESS << 1); /* (3) */
+    I2C1->OAR1 |= I2C_OAR1_OA1EN; /* (4) */  
+####从发送器  
+当I2C_TXDR寄存器为空时，将产生发送中断状态（TXIS）。如果I2C_CR1中的TXIE=1，将产生中断。  
+当I2C_TXDR寄存器中写入下一个要发送的数据时，TXIS位被清除。  
+当收到一个NACK时，I2C_ISR中的NACKF位被置1，并且如果I2C_CR1中的NACKIE=1还将产生中断。从机自动释放SCL和SDA，以便主机可以执行停止和重复起始位的发送。当收到NACK时，TXIS不会被置1。  
+当收到停止位并且I2C_CR1中的STOPIE=1时，I2C_ISR中的STOPF标志被置1并且产生中断。在大多数应用中，SBC位通常设置为0。在这种情况下，如果当TXE=0时接收到从机地址（ADDR=1），用户可以选择将I2C_TXDR寄存器中的内容作为第一个字节发送出去，或是，将TXE位置1从而清空I2C_TXDR，然后向其中写入新的数据。  
+在从机字节控制模式（SBC=1），在地址匹配（ADDR=1）中断子程序中必须在NBYTES中编写要传输的字节数。在这种情况下，传输期间TXIS事件的数量对应于NBYTES中编写的值。  
+警告：当NOSTRETCH=1时，在ADDR=1时，SCL时钟不会延长，这样用户就不能在ADDR子程序中来刷新I2C_TXDR以写入第一个数据字节。第一个要发送的数据字节必须提前写入I2C_TXDR寄存器中：  
+- 该数据可以是上一次传输信息的最后一个TXIS事件中写入的数据。  
+- 如果这个数据字节不是要发送的那个，可以通过设置TXE=1来清空I2C_TXDR，以写入新的数据字节。STOPF位必须在这些操作后才能被清零，以保证这些操作紧跟地址应答但在第一次数据传输开始前被执行。  
+如果当第一次数据传输开始后STOPF位仍为1，将产生下溢错误（OVR标志置1）。  
+如果需要一个TXIS事件（发送中断或DAM请求），用户必须将TXE位和TXIS位都置1，才会产生TXIS事件。  
+![](https://i.imgur.com/9BvxAsi.png)  
+![](https://i.imgur.com/gaB78XM.png)  
+![](https://i.imgur.com/6Du5zUl.png)  
