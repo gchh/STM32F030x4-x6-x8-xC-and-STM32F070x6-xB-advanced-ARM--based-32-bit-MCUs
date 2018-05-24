@@ -1,3 +1,4 @@
+
 #Inter-integrated circuit(I2C) interface  
 ##简介  
 I<sup>2</sup>C总线接口处理微控制器和串行I<sup>2</sup>C总线间的通信。它提供多主机功能，可以控制所有I<sup>2</sup>C总线特定的时序、协议、仲裁和定时。它支持标准模式（Sm），快速模式（Fm）和超快速模式（Fm+）。  
@@ -307,3 +308,8 @@ t<sub>SYNC2</sub>的持续时间取决于以下参数：
     I2C2->CR1 = I2C_CR1_PE; /* (2) */
     I2C2->CR2 = I2C_CR2_AUTOEND | (1 << 16) | (I2C1_OWN_ADDRESS << 1); /* (3) */   
 ####主接收器寻址一个10位地址从器件的初始化  
+- 如果从地址是10位格式，可以选择将I2C_CR2中的HEAD10R位清零来发送完整的读序列。这种情况下，主器件在START位置1后自动发送下面的完整序列：(Re)Start + Slave address 10-bit header Write + Slave address 2nd byte +REStart + Slave address 10-bit header Read  
+![](https://i.imgur.com/ZjmjnC9.png)  
+- 如果主器件要寻址一个10位地址的从器件，向该器件发送数据然后读取该从器件发回的数据，必须首先完成主器件的发送流程。然后，重复起始位置1，10为从地址配置为HEAD10R=1。在这种情况下，主器件发送序列为：ReStart + Slave address 10-bit header Read  
+![](https://i.imgur.com/PHuIA4b.png)  
+####主器件发送  
