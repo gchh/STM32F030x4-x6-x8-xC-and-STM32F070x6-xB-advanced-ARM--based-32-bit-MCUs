@@ -246,3 +246,64 @@ I2C硬件中有一个内嵌的字节计数器，可以在各种模式下管理�
         }
     }  
 ###I2C主模式  
+####I2C主模式初始化  
+在使能外设前，必须通过设置I2C_TIMINGR寄存器中的SCLH和SCLL位配置好I2C主机时钟。  
+STM32CubeMX工具在I2C配置窗口计算并提供I2C_TIMINGR内容。  
+为了支持多主机情况和从机延长时钟，提供了时钟同步机制。  
+为了让时钟同步：  
+- 从SCL低电平被内部检测到开始，使用SCLL计数器对时钟低电平进行计数。  
+- 从SCL高电平被内部检测到开始，使用SCLH计数器对时钟高电平进行计数。  
+I2C经过延时t<sub>SYNC1</sub>后检测自身的SCL低电平，该延时取决于SCL下降沿、SCL输入噪声滤波器（模拟+数字）和SCL与I2CxCLK时钟的同步。一旦SCLL计数器达到I2C_TIMINGR寄存器中SCLL[7:0]编程的值，I2C便释放SCL变为高电平。  
+I2C经过延时t<sub>SYNC2</sub>后检测自身的SCL高电平，该延时取决于SCL上升沿、SCL输入噪声滤波器（模拟+数字）和SCL与I2CxCLK时钟的同步。一旦SCLH计数器达到I2C_TIMINGR寄存器中SCLH[7:0]编程的值，I2C就会将SCL拉到低电平。  
+因此，主机时钟周期是：  
+t<sub>SCL</sub> = t<sub>SYNC1</sub> + t<sub>SYN2</sub> + {[(SCLH+1) + (SCLL+1)] × (PRESC+1) × t<sub>I2CCLK</sub>}  
+t<sub>SYNC1</sub>的持续时间取决于以下参数：  
+- SCL下降沿  
+- 由于使用模拟滤波器，带来的输入延时  
+- 由于使用数字滤波器，带来的输入延时：DNF×t<sub>I2CCLK</sub>  
+- SCL与I2CCLK时钟进行同步，引起的延时（2到3个I2CCLK时钟周期）  
+t<sub>SYNC2</sub>的持续时间取决于以下参数：  
+- SCL上升沿  
+- 使用模拟滤波器，引入的输入延时  
+- 使用数字滤波器，引入的输入延时：DNF×t<sub>I2CCLK</sub>  
+- SCL与I2CCLK时钟同步，造成的延时（2到3个I2CCLK时钟周期）  
+![](https://i.imgur.com/LrLgape.png)  
+警告：为了符合I2C或SMBus规范，主机时钟必须遵循下表的时序：  
+![](https://i.imgur.com/vfpGxT0.png)  
+注：SCLL也被用于产生t<sub>BUF</sub>和t<sub>SU:STA</sub>时序。SCLH也被用于产生t<sub>HD:STA</sub>和t<sub>SU:STO</sub>。  
+####主机通信初始化（地址阶段）  
+要启动通信，用户必须在I2C_CR2寄存器中为要寻址的从机编程以下参数：  
+- 地址模式（7位或10位）：ADD10  
+- 要发送的从机地址：SADD[9:0]  
+- 传输方向：RD_WRN  
+- 在10位地址读取的情况：HEAD10R位。必须配置HEAD10R位，以指示当传输方向改变时，是必须发送完整的地址序列，还是只要发送地址头就可以。  
+- 要发送的字节数：NBYTES[7:0]。如果字节数大于等于255，必须将NBYTES[7:0]初始化为0xFF。  
+然后，用户需要将I2C_CR2中的START位置1。当START=1时，上述所有位不允许更改。  
+一旦主器件检测到总线空闲（BUSY=0），经过t<sub>BUF</sub>的延时后，主器件自动发送起始位，随后发送从器件地址。  
+发生仲裁丢失时，主器件自动切换回从模式，并且如果作为从器件被寻址，还会对自身地址进行应答。  
+注：当从机地址已发送到总线上，I2C_CR2中的START位由硬件自动清零，而不管接收到的应答值如何。如果发送仲裁丢失，START位也会被硬件清零。  
+在10位地址模式，当首先发送的前7位地址，从器件NACK，主器件会自动重启从地址发送，直到收到从器件发来的ACK。在这里，接收到从器件发来的NACK后，主器件会将ADDRCF置1，以停止从地址发送。  
+当START=1时，I2C作为从器件被寻址到（ADDR=1），I2C会从主模式切换为从模式，并且START位在ADDRCF位被置1时被清零。  
+注：该步骤同样适用于重复起始位。在这种情况，BUSY=1。  
+![](https://i.imgur.com/sR8KzWy.png)  
+######I2C configured in master mode to receive code example  
+
+    /* (1) Timing register value is computed with the AN4235 xls file,
+           fast Mode @400kHz with I2CCLK = 48MHz, 
+           rise time = 140ns, fall time = 40ns */
+    /* (2) Periph enable, receive interrupt enable */
+    /* (3) Slave address = 0x5A, read transfer, 1 byte to receive, autoend */
+    I2C2->TIMINGR = (uint32_t)0x00B01A4B; /* (1) */
+    I2C2->CR1 = I2C_CR1_PE | I2C_CR1_RXIE; /* (2) */
+    I2C2->CR2 = I2C_CR2_AUTOEND | (1<<16) | I2C_CR2_RD_WRN | (I2C1_OWN_ADDRESS << 1); /* (3) */  
+######I2C configured in master mode to transmit code example  
+
+    /* (1) Timing register value is computed with the AN4235 xls file,
+           fast Mode @400kHz with I2CCLK = 48MHz, 
+           rise time = 140ns, fall time = 40ns */
+    /* (2) Periph enable */
+    /* (3) Slave address = 0x5A, write transfer, 1 byte to transmit, autoend */
+    I2C2->TIMINGR = (uint32_t)0x00B01A4B; /* (1) */
+    I2C2->CR1 = I2C_CR1_PE; /* (2) */
+    I2C2->CR2 = I2C_CR2_AUTOEND | (1 << 16) | (I2C1_OWN_ADDRESS << 1); /* (3) */   
+####主接收器寻址一个10位地址从器件的初始化  
