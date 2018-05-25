@@ -316,3 +316,48 @@ t<sub>SYNC2</sub>的持续时间取决于以下参数：
 在写传输的情况下，在每个字节发送完后，也就是在第9个SCL脉冲收到ACK后，TXIS标志会被置1。  
 如果I2C_CR1寄存器中的TXIE位等于1，TXIS事件还会产生一个中断。当I2C_TXDR寄存器写入将要发送的下个数据时，TXIS标志被清零。  
 传输过程中发生的TXIS事件个数对应于NBYTES[7:0]编程的值。如果要发送的数据字节总数大于255，必须将I2C_CR2中的RELOAD位置1来选择重载模式。在这种情况，当NBYTES个字节的数据被发送后，TCR标志被置1，并且SCL被拉低直到NBYTES[7:0]写入非零值。  
+当收到NACK时，TXIS标志不会被置1：  
+- 当RELOAD=0且NBYTES个数据发送完成：  
+　- 在自动结束模式（AUTOEND=1），自动发送停止位。  
+　- 在软件结束模式（AUTOEND=0），TC标志被置1并且SCL被拉低以便执行软件操作：  
+　如果已经配置好适当的从地址和要传输的字节数，将I2C_CR2中的START位置1，来请求发送重复起始位。将START位置1，会将TC标志清零，并在总线上发送起始位。  
+　将I2C_CR2中的STOP位置1，来请求发送停止位。将STOP位置1，会将TC标志清零，并在总线上发送停止位。  
+- 如果收到NACK：TXIS标志不会置位，并在接收到NACK后自动发送停止位。I2C_ISR寄存器中的NACKF标志置1，如果NACKIE置1，还将产生中断。  
+![](https://i.imgur.com/1snEFm1.png)  
+![](https://i.imgur.com/3utA0UP.png)  
+![](https://i.imgur.com/JVl3KgO.png)  
+######I2C master transmitter code example  
+
+    /* Check Tx empty */
+    if ((I2C2->ISR & I2C_ISR_TXE) == I2C_ISR_TXE)
+    {
+        I2C2->TXDR = I2C_BYTE_TO_SEND; /* Byte to send */
+        I2C2->CR2 |= I2C_CR2_START; /* Go */
+    }  
+####主器件接收  
+在读传输时，在接收到每一个字节后（即第8个SCL脉冲后）RXNE标志被置1。如果I2C_CR1中的RXIE位被置位，RXNE事件还将产生中断。读取I2C_RXDR时，RXNE标志被清零。  
+如果要接收的数据字节总数大于255，必须将I2C_CR2中的RELOAD位置1，选择重载模式。在这种情况下，当NBYTES[7:0]个数据传输完成，TCR标志被置1，而且SCL被拉低直到NBYTES[7:0]写入非零值。  
+- 当RELOAD=0并且NBYTES[7:0]个数据已经传输完成：  
+　- 自动结束模式（AUTOEND=1），接收完最后一个字节数据，自动发送NACK和停止位。  
+　- 软件结束模式（AUTOEND=0），接收完最后一个字节，自动发送NACK，TC标志被置1，SCL被拉低，以便执行下面的软件操作：  
+　可以通过将I2C_CR2中的START位置1，并配置适当的从地址和传输的字节数，来请求发送重复起始位。将START位置1，会将TC标志清零，并在总线上发送起始位，其后是从地址。  
+　通过将I2C_CR2中的STOP位置1，来请求发送停止位。STOP位置1，会将TC标志清零，并在总线上发送停止位。  
+![](https://i.imgur.com/rit4s8S.png)  
+![](https://i.imgur.com/pwxk9Nu.png)  
+![](https://i.imgur.com/X8dtvT5.png)  
+######I2C master receiver code example  
+
+    if ((I2C2->ISR & I2C_ISR_RXNE) == I2C_ISR_RXNE)
+    {
+        /* Read receive register, will clear RXNE flag */
+        if (I2C2->RXDR == I2C_BYTE_TO_SEND)
+        {
+            /* Process */
+        }
+    }  
+###I2C_TIMINGR寄存器配置示例  
+下面的表格提供了如何配置I2C_TIMINGR以获得符合I2C规范的时序的示例。为了获得更精确的配置值，请参考应用笔记：I2C时序配置工具(AN4235)和相关软件STSW-STM32126。  
+![](https://i.imgur.com/2rcbgqi.png)  
+![](https://i.imgur.com/zoRvFoA.png)  
+![](https://i.imgur.com/HOe7QLW.png)  
+###SMBus特性  
