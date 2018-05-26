@@ -390,4 +390,50 @@ SMBus接收器必须能对接收到的命令或数据回应NACK。为了在从�
 如果配置为HOST（SMBHEN=1），当在SMBA引脚上检测到下降沿且ALERTEN=1时，I2C_ISR中的ALERT标志被置1。如果I2C_CR1中的ERRIE位为1，此时还会产生中断。如果ALERTEN=0，即使外部SMBA引脚被拉低，内部ALERT也会被认为是高电平。  
 如果不需要使用SMBus ALERT且ALERTEN=0，SMBA引脚可以用作标准GPIO。  
 ####包错误检测  
-SMBus规范中引入包错误检测机制，以提高可靠性和通信鲁棒性。
+SMBus规范中引入包错误检测机制，以提高可靠性和通信鲁棒性。包错误检测是通过在每次消息传输结尾增加一个包错误码（PEC）来实现的。PEC是对所有信息字节（包括地址和读/写位）使用CRC-8多项式C(x) = x<sup>8</sup> + x<sup>2</sup> + x + 1计算得到的。  
+该外设内嵌有一个硬件PEC计算单元，当接收到的字节和硬件计算的PEC不匹配时，会自动发送NACK。  
+####超时  
+该外设内嵌一个硬件定时器，以符合SMBus规范2.0版定义的3个超时。  
+![](https://i.imgur.com/byJ9gY8.png)  
+![](https://i.imgur.com/uWTdUDW.png)  
+####总线空闲检测  
+如果主器件检测到时钟和数据信号保持高电平的时间t<sub>IDLE</sub>大于t<sub>HIGH,MAX</sub>，就可以认为总线是空闲的。  
+该定时参数考虑到了如下情况，一个主器件被动态地添加到总线上，可能没检测到SMBCLK或SMBDAT上状态转换。在这种情况下，主器件必须等待足够长，以确保当前没有传输在进行。该外设支持硬件总线空闲检测。  
+###SMBus初始化  
+该部分只针对支持SMBus功能的器件。  
+为了执行SMBus通信，除了I2C初始化外，一些特定的初始化也要进行。  
+####接收命令和数据应答控制（从模式）  
+SMBus接收器必须对每个接收到的命令或数据回应NACK。为了在从模式下实现ACK控制，必须将I2C_CR1中的SBC位置1，使能从字节控制模式。  
+####特定地址（从模式）  
+必要时可以使能特定的SMBus地址。  
+- I2C_CR1中的SMBDEN=1，使能SMBus器件默认地址（0b1100 001）。  
+- I2C_CR1中的SMBHEN=1，使能SMBus Host地址（0b0001 000）。  
+- I2C_CR1中的ALERTEN=1，使能报警响应地址（0b0001 100）。  
+####包错误检测  
+I2C_CR1中的PECEN位置1，使能PEC计算。借助I2C_CR2中的NBYTES[7:0]来管理PEC传输。必须在I2C使能之前配置PECEN位。  
+PEC传输由硬件字节计数器管理，因此SMBus在从模式下必须将SBC位置1。当PECBYTE=1且RELOAD=0，在传输完NBYTES-1个字节的数据后，传输PEC。如果RELOAD=1，PECBYTE将不起作用。  
+警告：当I2C已经使能后，不能更改PECEN的配置。  
+![](https://i.imgur.com/j4255No.png)  
+####超时检测  
+I2C_TIMEOUTR中的TIMOUTEN位和TEXTEN位置1，使能超时检测。定时器必须按如下方式编程：即在SMBus规范2.0版规定的最大时间之前检测出超时。  
+- t<sub>TIMEOUT</sub>检测  
+　为了使能t<sub>TIMEOUT</sub>检测，必须将要检查的t<sub>TIMEOUT</sub>参数对应的定时器重载值写入12位的TIMEOUTA[11:0]。TIDLE位必须清零，以便检测SCL低电平超时。  
+　然后将I2C_TIMEOUTR中的TIMOUTEN位置1，使能定时器。如果SCL低电平持续时间超过（TIMEOUTA+1）×2048×t<sub>I2CCLK</sub>，I2C_ISR中的TIMEOUT标志被置1。  
+警告：当TIMEOUTEN位置1后，不允许更改TIMEOUTA[11:0]和TIDLE位的配置。  
+- t<sub>LOW:SEXT</sub>和t<sub>LOW:MEXT</sub>检测  
+　取决于外设配置成主模式还是从模式，配置12位的TIMEOUTB定时器检测t<sub>LOW:SEXT</sub>或t<sub>LOW:MEXT</sub>。因为规范只规定了最大值，所以用户可以为这两个参数选择与之相同的值。  
+　然后将I2C_TIMEOUTR中的TEXTEN位置1，使能定时器。如果SMBus外设执行SCL延展的积累时间超过了（TIMEOUTB+1）×2048×t<sub>I2CCLK</sub>并且处在总线空闲检测一节描述的超时间隔中，I2C_ISR中的TIMEOUTT标志被置1。  
+警告：当TEXTEN位置1后，TIMEOUTB的配置不允许更改。  
+####总线空闲检测  
+为了使能t<sub>IDLE</sub>检测，12位的TIMEOUTA[11:0]必须被编程位定时器重载值，以获得t<sub>IDLE</sub>参数。TIDLE位必须置1，为了检测SCL和SDA上的高电平超时。  
+然后，I2C_TIMEOUTR中的TIMOUTEN位置1，使能定时器。  
+如果SCL和SDA两者保持高电平的时间都超过了（TIMEOUTA+1）×4×t<sub>I2CCLK</sub>，I2C_ISR中的TIMEOUT标志会被置1。  
+警告：当TIMEOUTEN位置1后，TIMEOUTA和TIDLE的配置不能更改。  
+###SMBus：I2C_TIMEOUTR寄存器配置示例   
+- 配置t<sub>TIMEOUT</sub>最长为25ms：  
+![](https://i.imgur.com/gUtHHEE.png)  
+- 配置t<sub>LOW:SEXT</sub>和t<sub>LOW:MEXT</sub>最长为8ms：  
+![](https://i.imgur.com/RTAynbt.png)  
+- 配置t<sub>IDLE</sub>最长为50us：  
+![](https://i.imgur.com/XaCVdpi.png)  
+###SMBus从模式  
