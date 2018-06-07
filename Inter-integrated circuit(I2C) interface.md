@@ -437,3 +437,52 @@ I2C_TIMEOUTR中的TIMOUTEN位和TEXTEN位置1，使能超时检测。定时器�
 - 配置t<sub>IDLE</sub>最长为50us：  
 ![](https://i.imgur.com/XaCVdpi.png)  
 ###SMBus从模式  
+该部分只针对支持SMBus功能的器件。  
+除了I2C从模式传输管理还需要执行一些额外的软件流程以支持SMBus。  
+####SMBus从发送器  
+当在SMBus下使用IP时，SBC必须设置为1，以允许在编程的数据字节发送完后发送PEC。当PECBYTE位被置1，NBYTES[7:0]中编程的字节数要包含PEC传输。在这种情况下，TXIS中断的总数是NBYTES-1，如果主器件在NBYTES-1个数据字节传输后请求额外的字节，I2C_PECR寄存器的内容将被自动发送出。  
+警告：当RELOAD位置1时，PECBYTE位不起作用。  
+![](https://i.imgur.com/k9eIUg8.png)  
+![](https://i.imgur.com/JOi3wk8.png)  
+####SMBus从接收器  
+当在SMBus模式下使用I2C时，SBC必须被置1，以允许在完成编程的数据字节数传输后进行PEC校验。为了对每个字节进行ACK控制，RELOAD位必须置1，选择重载模式。  
+为了校验PEC字节，RELOAD位必须被清零，而PECBYTE位置1。在这种情况下，在接收到NBYTES-1个数据后，接收的下一个字节和内部I2C_PECR寄存器的内容进行比较。如果比较不匹配，自动发送一个NACK；比较匹配，则发送ACK。PEC字节接收到后，和其他数据一样被拷贝到I2C_RXDR寄存器中，并且RXNE标志置1。  
+如果PEC不匹配，PECERR标志会置1，并且如果I2C_CR1中的ERRIE位为1的话，还将产生中断。  
+如果不需要ACK软件控制，用户可以编程PECBYTE=1，在同样的写操作下，将NBYTES设置为连续接收的字节数。在接收到NBYTES-1个字节后，接收到的下一个字节被作为PEC来校验。  
+警告：当RELOAD位置1时，PECBYTE位不起作用。  
+![](https://i.imgur.com/Bf3GmCn.png)  
+![](https://i.imgur.com/ejknHEJ.png)  
+####SMBus主发送器  
+当SMBus主器件要发送PEC时，在START位置1之前，必须设置PECBYTE位为1，并在NBYTES[7:0]中写入要发送的字节数。这种情况下，TXIS中断的总数是NBYTES-1。因此，当NBYTES=0x01时PECBYTE位置1，I2C_PECR寄存器的内容将被自动发送。  
+如果SMBus主器件在PEC之后要发送停止位，就需要选择自动结束模式（AUTOEND=1）。这种情况下，发送PEC后，将自动发送STOP。  
+如果SMBus主器件在PEC后要发送重复起始位，就要选择软件结束模式（AUTOEND=0）。这种情况下，发送完NBYTES-1个字节后，自动发送I2C_PECR寄存器的内容，并在PEC发送完后将TC标志置1，SCL被拉伸低电平。必须在TC中断服务子程序中，设置RESTART条件。  
+警告：RELOAD=1时，PECBYTE位不起作用。  
+![](https://i.imgur.com/LL6KSKN.png)  
+####SMBus主接收器  
+当SMBus主器件要在接收PEC之后发送STOP时，要选择自动结束模式（AUTOEND=1）。在START位置1之前，必须将PECBYTE位置1，并且设置从地址。这种情况下，在接收到NBYTES-1个字节数据后，下一个接收到的字节自动和I2C_PECR寄存器的内容进行比较。对接收到的PEC，主器件将发送NACK作为响应，跟着发送STOP。  
+当SMBus主接收器在接收到PEC后，要发送重复起始位时，必须选择软件结束模式（AUTOEND=0）。在START位置1之前，PECBYTE位必须置1，并设置从地址。这种情况下，在接收到NBYTES-1个字节数据后，接收到的下一个字节将和I2C_PECR寄存器的内容自动进行比较。在接收到PEC后，TC标志被置1，SCL被拉伸低电平。RESTART条件可以在TC中断子程序中设置。  
+警告：RELOAD=1时，PECBYTE位不起作用。  
+![](https://i.imgur.com/rnqrpJ9.png)  
+###错误条件  
+以下是可能导致通信失败的错误条件。  
+####总线错误（BERR）  
+当不是在第9的倍数个SCL时钟脉冲之后，检测到START或STOP时，就发生了总线错误。在SCL为高电平时，SDA上出现边沿，就会检测到START或STOP。  
+仅当I2C作为主器件或被寻址的从器件处于传输过程中时，总线错误标志才会置1。例如，在从模式下的寻址阶段，总线错误标志不会被置1。  
+在从模式下发生START或RESTART错位时，I2C会像接收到正确的START一样进入地址识别阶段。  
+当检测到总线错误，I2C_ISR寄存器中的BERR标志会被置1，如果I2C_CR1中的ERRIE位设置为1，还将产生中断。  
+####仲裁丢失（ARLO）  
+如果SDA上发送的是高电平，但在SCL上升沿采样SDA得到的却是低电平，就检测到一个仲裁丢失。  
+- 在主模式下，如果仲裁丢失在地址阶段、数据阶段和应答阶段被检测到，SDA和SCL都会被释放，START位被硬件清零，并且主模式被自动切换为从模式。  
+- 在从模式下，如果在数据阶段和应答阶段检测到仲裁丢失，会停止传输，SCL和SDA被释放。  
+当检测到仲裁丢失时，I2C_ISR中的ARLO标志被置1，如果I2C_CR1中的ERRIE位被置1，还会产生中断。  
+####上溢/下溢错误（OVR）  
+在从模式下，当NOSTRETCH=1，并出现下列情况时，会检测到上溢或下溢错误：  
+- 在接收时，RXDR寄存器还未被读取，就接收到一个新字节。新接收到的字节会丢失，并自动发送一个NACK作为应答。  
+- 在发送时：  
+　- 当应该发送第一个字节数据时，STOPF却为1。如果TXE=0，发送I2C_TXDR寄存器的内容，否则，发送0xFF。  
+　- 当应该发送一个新字节时，I2C_TXDR寄存器中却没有写入新数据，此时将发送0xFF。  
+当检测到上溢或下溢错误时，I2C_ISR寄存器中的OVR标志被置1，如果I2C_CR1寄存器中的ERRIE位置1，将产生中断。  
+####包错误检测错误（PECERR）  
+该部分仅针对支持SMBus功能的器件。  
+当接收到的PEC字节和I2C_PECR的内容不匹配时，检测到PEC错误。接收到错误的PEC后，自动发送一个NACK作为应答。  
+当PEC错误被检测到，I2C_ISR寄存器中的PECERR标志被置1，如果I2C_CR1中的ERRIE位置1，将产生中断。  
