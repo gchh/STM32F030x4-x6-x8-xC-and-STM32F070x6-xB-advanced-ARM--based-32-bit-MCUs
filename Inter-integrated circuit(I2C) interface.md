@@ -1,4 +1,3 @@
-
 #Inter-integrated circuit(I2C) interface  
 ##简介  
 I<sup>2</sup>C总线接口处理微控制器和串行I<sup>2</sup>C总线间的通信。它提供多主机功能，可以控制所有I<sup>2</sup>C总线特定的时序、协议、仲裁和定时。它支持标准模式（Sm），快速模式（Fm）和超快速模式（Fm+）。  
@@ -486,3 +485,18 @@ I2C_TIMEOUTR中的TIMOUTEN位和TEXTEN位置1，使能超时检测。定时器�
 该部分仅针对支持SMBus功能的器件。  
 当接收到的PEC字节和I2C_PECR的内容不匹配时，检测到PEC错误。接收到错误的PEC后，自动发送一个NACK作为应答。  
 当PEC错误被检测到，I2C_ISR寄存器中的PECERR标志被置1，如果I2C_CR1中的ERRIE位置1，将产生中断。  
+####超时错误（TIMEOUT）  
+该部分仅针对支持SMBus功能的器件。  
+下面任何一种情况都会导致超时错误发生：  
+- TIDLE=0并且SCL保持低电平的时间达到了TIMEOUTA[11:0]所定义的时间：这用于检测SMBus超时。  
+- TIDLE=1并且SDA和SCL两者保持高电平的时间达到了IMEOUTA[11:0]所定义的时间：这用来检测总线空闲状态。  
+- 主器件时钟低电平积累的延伸时间达到了TIMEOUTB[11:0]所定义的时间（SMBus t<sub>LOW:MEXT</sub>参数）。  
+- 从器件积累的时钟低电平延伸时间达到了TIMEOUTB[11:0]所定义的时间（SMBus t<sub>LOW:SEXT</sub>参数）。  
+当主模式下检测到一个超时时，会自动发送STOP。  
+在从模式下检测到超时时，SDA和SCL被自动释放。  
+检测到超时后，I2C_ISR寄存器中的TIMEOUT标志被置1，如果I2C_CR1中的ERRIE位为1，将产生中断。  
+####报警（ALERT）  
+该部分仅针对支持SMBus功能的器件。  
+当I2C接口被配置为HOST（SMBHEN=1），SMBA引脚报警检测功能被使能（ALERTEN=1）并且在其上检测到一个下降沿时，ALERT标志才被置1.如果I2C_CR1中的ERRIE位为1，还将产生中断。  
+###DMA请求  
+####使用DMA进行发送  
