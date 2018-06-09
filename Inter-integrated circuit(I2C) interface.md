@@ -558,3 +558,26 @@ DMA可以用于接收，通过设置I2C_CR1中的RXDMAEN位为1。当RXNE=1时�
 ###时序寄存器（I2C_TIMINGR）  
 ![](https://i.imgur.com/qg3ERBA.png)  
 ![](https://i.imgur.com/204d7vh.png)  
+###超时寄存器（I2C_TIMEOUTR）  
+![](https://i.imgur.com/lP1rAwA.png)  
+![](https://i.imgur.com/7UNaEWK.png) 
+###中断和状态寄存器（I2C_ISR）  
+![](https://i.imgur.com/DcZwlLK.png)  
+![](https://i.imgur.com/hwcPNCH.png)  
+![](https://i.imgur.com/jcuPK5h.png)  
+![](https://i.imgur.com/xdO3Kax.png)  
+![](https://i.imgur.com/PbYEVVG.png)  
+###中断清除寄存器（I2C_ICR）  
+![](https://i.imgur.com/Z3ATXQm.png)  
+![](https://i.imgur.com/5OTNNWr.png)  
+![](https://i.imgur.com/OdQx0XZ.png)  
+###PEC寄存器（I2C_PECR）  
+![](https://i.imgur.com/Dz7iAL5.png)  
+###接收数据寄存器（I2C_RXDR）  
+![](https://i.imgur.com/33DPaXB.png)  
+###发送数据寄存器（I2C_TXDR）  
+![](https://i.imgur.com/F50U4Zp.png)  
+##I2C寄存器映射  
+![](https://i.imgur.com/mntvOqf.png)  
+![](https://i.imgur.com/B75BX6z.png)  
+![](https://i.imgur.com/N8wr5wR.png)  
