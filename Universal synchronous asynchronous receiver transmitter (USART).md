@@ -67,3 +67,70 @@
 ![](https://i.imgur.com/2ZZr5n5.png)  
 注：这两幅图有差异，感觉第2幅图才是正确的，符合断开字符的描述。  
 ### USART发送器  
+发送器可以发送8位或9位的数据字，取决于M位的状态。发送使能位TE必须置1，以激活发送器功能。发送移位寄存器中的数据输出到TX引脚上，同时相应的时钟脉冲输出在CK引脚上。  
+#### 字符发送  
+USART发送时，默认配置下，数据的最低有效位首先移出到TX引脚上。在此模式下，USART_TDR寄存器充当了一个内部总线和发送移位寄存器之间的缓冲器（TDR）（见图226）。  
+每个字符前面都有一个起始位，它是持续一个位周期的逻辑低电平。字符以配置的1个或2个停止位结束。  
+注：在向USART_TDR寄存器写入要发送的数据之前必须先将TE位置1。  
+TE位在发送数据期间不能复位。否则，会冻结波特率计数器，导致TX引脚上的数据损坏，当前正在发送的数据就会丢失。  
+TE位置1后，将发送一个空闲帧。  
+#### 可配置的停止位  
+跟随每个字符发送的停止位个数可以在控制寄存器2的第12和13位编程。  
+- 1个停止位：停止位个数的默认值。  
+- 2个停止位：正常的USART，单线模式和调制解调器模式，支持。  
+发送的空闲帧包括停止位。  
+发送的断开帧包括10个低电平位（M0=0）或11个低电平位（M0=1），其后紧跟2个停止位（见图228）。无法发送更长的断开帧（长度大于10或11位）。  
+![](https://i.imgur.com/PzlGimn.png)  
+#### 字符发送配置  
+1. 配置USART_CR1中的M位确定字长。  
+2. 配置USART_BRR寄存器确定波特率。  
+3. 在USART_CR2中配置停止位个数。  
+4. 将USART_CR1寄存器中的UE位置1，使能USART。  
+5. 如果采用多缓冲器通信，在USART_CR3中选择DMA使能（DMAT）。按照多缓冲器通信的说明配置DMA寄存器。  
+6. 将USART_CR1中的TE位置1，发送一个空闲帧作为第一次发送。  
+7. 向USART_TDR寄存器中写入要发送的数据（这将清零TXE位）。在单缓冲器的情况下，对每个要发送的数据重复该步骤。  
+8. 将最后一个数据写入USART_TDR寄存器后，等待TC=1。它表示最后一帧数据发送完成。在禁止USART或进入停机模式之前，可以用它来确认发送是否完成，以免破环最后一次发送。  
+###### USART transmitter configuration code example  
+
+	/* (1) Oversampling by 16, 9600 baud */
+	/* (2) 8 data bit, 1 start bit, 1 stop bit, no parity */
+	USART1->BRR = 480000 / 96; /* (1) */
+	USART1->CR1 = USART_CR1_TE | USART_CR1_UE; /* (2) */  
+#### 单字节通信  
+清零TXE位总是通过向发送数据寄存器写数据来执行的。  
+TXE位由硬件置位，它表示：  
+- 数据已经从USART_TDR寄存器转移到的移位寄存器中，且数据发送已经开始。  
+- USART_TDR寄存器是空的。  
+- 下一个数据可以写入USART_TDR寄存器中，而不会覆盖前一个数据。  
+###### USART transmit byte code example  
+
+	/* Start USART transmission */
+	USART1->TDR = stringtosend[send++]; /* Will inititiate TC if TXE is set*/  
+如果TXEIE位置1，TXE=1会产生中断。  
+在发送中，对USART_TDR寄存器的写操作将数据存入TDR寄存器；此后，在当前正在进行的发送结束后，该数据复制进移位寄存器。  
+未发送时，对USART_TDR寄存器的写操作会将数据直接放入移位寄存器，数据发送开始时，TXE位会被置1。  
+如果一帧发送完毕（停止位发送后），此时TXE位还是1，那么，TC位将被置1。如果USART_CR1寄存器中的TCIE位置1，此时还会产生一个中断。  
+向USART_TDR寄存器写入最后一个要发送的数据后，在禁止USART或设置微控制器进入低功耗模式之前，必须等待TC=1。  
+![](https://i.imgur.com/pPeiG8A.png)  
+###### USART transfer complete code example  
+
+	if ((USART1->ISR & USART_ISR_TC) == USART_ISR_TC)
+	{
+		if (send == sizeof(stringtosend))
+		{
+			send=0;
+			USART1->ICR |= USART_ICR_TCCF; /* Clear transfer complete flag */
+		}
+		else
+		{
+			/* clear transfer complete flag and fill TDR with a new char */
+			USART1->TDR = stringtosend[send++];
+		}
+	}  
+#### 断开字符  
+将SBKRQ位置1，发送一个断开字符。断开帧的长度取决于M位（见图227）。  
+如果SBKRQ位被置1，将在完成当前字符发送后，在TX上发送断开字符。SBKF位会在SBKRQ=1时置1，并在断开字符发送完成时由硬件清零（在断开字符后的停止位发送期间）。USART在断开字符后插入2个停止位，以确保下一帧起始位的识别。  
+在应用需要在之前插入的所有数据（包括尚未发送的数据）后发送断开字符的情况下，在SBKRQ位置1之前需要确定TXE=1。  
+#### 空闲字符  
+将TE位置1，USART会在第一个数据帧之前首先发送一个空闲字符。  
+### USART接收器  
