@@ -205,3 +205,47 @@ b) 2次采样，其中一次采样的3个采样位中有2位是0，另一次采�
 根据不同的应用：  
 - 在噪声环境下工作时，选择3次采样多数票决的方法（ONEBIT=0）；当检测到噪声时，抛弃该数据，因为它表明在采样过程中有干扰。  
 - 在线路无噪声时，选择单次采样的方法（ONEBIT=1），以提高接收器对时钟偏差的容忍度。在这种情况下，NF位永远不会被置位。  
+当在帧中检测到噪声：  
+- NF位在RXNE位的上升沿被置1。  
+- 无效的数据仍然会从移位寄存器转移到USART_RDR寄存器中。  
+- 在单字节通信的情况下不会产生中断。但是和NF位同时置位的RXNE位可以产生中断。在多缓冲器通信的情况，如果USART_CR3中的EIE位置1，则会产生中断。  
+将USART_ICR中的NFCF位置1，清除NF位。  
+![](https://i.imgur.com/usaJ56U.png)  
+![](https://i.imgur.com/1pF6npK.png)  
+![](https://i.imgur.com/FsZPyyz.png)  
+#### 帧错误  
+失去同步、大量噪声、或是在预期的时间没有辨认出停止位，都会导致帧错误发生。  
+检测到帧错误时：  
+- FE位由硬件置1  
+- 无效的数据仍然会从移位寄存器转移到USART_RDR中  
+- 在单字节通信的情况下不会产生中断。但是和FE位同时置位的RXNE位可以产生中断。在多缓冲器通信的情况，如果USART_CR3中的EIE位置1，则会产生中断。  
+将USART_ICR中的FECR位置1，清除FE位。  
+#### 配置接收期间的停止位  
+通过USART_CR2配置接收的停止位个数；正常模式下，可以是1位或2位。  
+- 1个停止位：在第8、9和10个采样点对1个停止位进行采样。  
+- 2个停止位：在第8、9和10个采样点对第1个停止位进行采样，如果发现帧错误，FE标志位会被置1。第2个停止位不检查帧错误。在第1个停止位结束时，RXNE标志会被置1。  
+### USART波特率产生  
+接收器和发送器（RX和TX）的波特率都在USART_BRR中设置为相同的值。  
+#### 公式1：标准USART（包括SPI模式）（OVER8=0或1）的波特率  
+OVER8=0时，Tx/Rx波特率=f<sub>CK</sub>/USARTDIV  
+OVER8=1时，Tx/Rx波特率=(2×f<sub>CK</sub>)/USARTDIV  
+USARTDIV是一个存放在USART_BRR寄存器中的无符号定点数。  
+- 当OVER8=0时，BRR=USARTDIV。  
+- 当OVER8=1时，  
+　- BRR[2:0]=USARTDIV[3:0]>>1  
+　- BRR[3]必须保持为0  
+　- BRR[15:4]=USARTDIV[15:4]  
+注：写入USART_BRR中的波特率新值会立即更新波特率计数器。因此，在通信过程中，不应该改变波特率寄存器的值。  
+在8倍或16倍过采样的情况下，USARTDIV必须大于等于16（推测，是因为这样采样频率才不会超过f<sub>CK</sub>，不知是否如此？）。  
+#### 如何从USART_BRR寄存器的值算出USARTDIV  
+##### 例1  
+f<sub>CK</sub>=8MHz，波特率9600：  
+- OVER8=0，16倍过采样：USARTDIV=8000000/9600，BRR=USARTDIV=833d=0341h  
+- OVER8=1，8倍过采样：USARTDIV=(2*8000000)/9600=1667d=683h，BRR[3:0]=3h>>1=1h，BRR=0x681  
+##### 例2  
+f<sub>CK</sub>=48MHz，波特率921.6K：  
+- OVER8=0，16倍过采样：USARTDIV=48000000/921600，BRR=USARTDIV=52d=34h  
+- OVER8=1，8倍过采样：USARTDIV=(2*48000000)/921600=104d=68h，BRR[3:0]=USARTDIV[3:0]>>1=8h>>1=4h，BRR=0x64  
+![](https://i.imgur.com/weJyRTY.png)  
+![](https://i.imgur.com/I7tiKHQ.png)  
+### USART接收器对时钟偏差的容忍度  
