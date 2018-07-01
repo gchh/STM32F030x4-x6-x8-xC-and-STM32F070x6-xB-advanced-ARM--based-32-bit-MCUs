@@ -318,3 +318,45 @@ USART有2种方法进入或退出静默模式，使用哪一种取决于USART_CR
 #### 发送生成奇偶校验位  
 如果USART_CR1中的PCE位被置1，则数据寄存器中的数据的MSB位被奇偶校验位替换后发送（PS=0选择偶校验，要有偶数个1；PS=1选择奇校验，有奇数个1）。  
 ### USART同步模式  
+将USART_CR2中CLKEN位置1，选择同步模式。在同步模式下，下列位必须保持为0：  
+- USART_CR3中的SCEN、HDSEL和IREN位。  
+在此模式下，主模式下的USART可以控制双向同步串行通信。CK引脚是USART发送器的时钟输出。在起始位和停止位期间，CK引脚不会有时钟脉冲。USART_CR2中的LBCL位，决定在最后一位有效数据位（地址标记）期间，是否输出时钟脉冲。USART_CR2中的CPOL位，选择时钟的极性。USART_CR2中的CPHA位，选择外部时钟的相位（参加图235，图236和237）。  
+空闲状态期间、序文和发送断开字符时，外部CK时钟被禁止。  
+在同步模式下USART发送器的工作方式和在异步模式下完全相同。但由于CK与TX同步（通过CPOL和CPHA），所以TX上的数据是同步的。  
+同步模式下USART接收器的工作方式和异步模式下不同。如果RE=1，数据在CK脉冲时被采样（上升沿还是下降沿，取决于CPOL和CPHA），而不是进行任何过采样。但必须确保建立和保持时间（取决于波特率：1/16位持续时间）。  
+注：CK引脚是同TX引脚结合工作的。因此，只有当发送器被使能（TE=1），并且正在发送数据时（已写入USART_TDR），才会输出时钟。也就是说，在没有发送数据的情况下，不可能接收同步数据。  
+LBCL、CPOL和CPHA位必须在USART未使能（UE=0）时设置，以确保时钟脉冲功能正确。  
+###### USART synchronous mode code example  
+
+	/* (1) Oversampling by 16, 9600 baud */
+	/* (2) Synchronous mode
+		   CPOL and CPHA = 0 => rising first edge
+	       Last bit clock pulse
+	       Most significant bit first in transmit/receive */
+	/* (3) 8 data bit, 1 start bit, 1 stop bit, no parity
+	       Transmission enabled, reception enabled */
+	USART1->BRR = 480000 / 96; /* (1) */
+	USART1->CR2 = USART_CR2_MSBFIRST | USART_CR2_CLKEN | USART_CR2_LBCL; /* (2) */
+	USART1->CR1 = USART_CR1_TE | USART_CR1_RXNEIE | USART_CR1_RE | USART_CR1_UE; /* (3) */
+	/* Polling idle frame Transmission w/o clock */
+	while ((USART1->ISR & USART_ISR_TC) != USART_ISR_TC)
+	{
+		/* add time out here for a robust application */
+	}
+	USART1->ICR |= USART_ICR_TCCF; /* Clear TC flag */
+	USART1->CR1 |= USART_CR1_TCIE; /* Enable TC interrupt */  
+![](https://i.imgur.com/TUU2olx.png)  
+![](https://i.imgur.com/z8DHA5j.png)  
+![](https://i.imgur.com/qCo7YUn.png)  
+![](https://i.imgur.com/XJKfHO6.png)  
+### USART单线半双工通信  
+USART_CR3中的HDSEL位置1，选择单线半双工模式。在该模式下，下列位必须保持为0：  
+- USART_CR2中的CLKEN位，  
+- USART_CR3中的SCEN和IREN位。  
+在单线半双工模式下，USART的TX和RX在内部是连接在一起的。  
+一旦HDSEL被置1：  
+- TX和RX在内部连接在一起  
+- RX引脚不再使用  
+- 当无数据发送时，TX引脚被释放。因此，在空闲或接收时，TX引脚可以作为标准I/O。这意味着，必须把该I/O配置成复用功能TX，开漏并外接上拉。  
+除此之外，通信协议与正常USART模式相同。线路上的任何冲突必须通过软件进行管理（例如，使用中央仲裁器）。尤其要注意，当TE位被置1后，发送永远不会被硬件阻止，只要数据写入数据寄存器，就持续发送。  
+### USART使用DMA进行连续通信  
