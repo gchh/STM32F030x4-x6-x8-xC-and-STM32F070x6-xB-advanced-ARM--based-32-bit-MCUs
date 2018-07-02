@@ -360,3 +360,91 @@ USART_CR3中的HDSEL位置1，选择单线半双工模式。在该模式下，�
 - 当无数据发送时，TX引脚被释放。因此，在空闲或接收时，TX引脚可以作为标准I/O。这意味着，必须把该I/O配置成复用功能TX，开漏并外接上拉。  
 除此之外，通信协议与正常USART模式相同。线路上的任何冲突必须通过软件进行管理（例如，使用中央仲裁器）。尤其要注意，当TE位被置1后，发送永远不会被硬件阻止，只要数据写入数据寄存器，就持续发送。  
 ### USART使用DMA进行连续通信  
+USART可以使用DMA进行连续通信。Rx缓冲区和Tx缓冲区的DMA请求时独立产生的。  
+###### USART DMA code example  
+
+    /* (1) Oversampling by 16, 9600 baud */
+    /* (2) Enable DMA in reception and transmission */
+    /* (3) 8 data bit, 1 start bit, 1 stop bit, no parity, reception and
+    transmission enabled */
+    USART1->BRR = 480000 / 96; /* (1) */
+    USART1->CR3 = USART_CR3_DMAT | USART_CR3_DMAR; /* (2) */
+    USART1->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE; /* (3) */
+    /* Polling idle frame Transmission */
+    while ((USART1->ISR & USART_ISR_TC) != USART_ISR_TC)
+    {
+        /* add time out here for a robust application */
+    }
+    USART1->ICR |= USART_ICR_TCCF; /* Clear TC flag */
+    USART1->CR1 |= USART_CR1_TCIE; /* Enable TC interrupt */  
+#### 使用DMA进行发送  
+将USART_CR3中的DMAT位置1，使能利用DMA发送。每当TXE位置1时，数据从DMA外设配置的SRAM区域载入到USART_TDR寄存器中。按以下步骤，配置一个DMA通道用于USART发送（x表示通道号）：  
+1. 将USART_TDR寄存器的地址写入DMA控制寄存器，作为DMA传输的目标地址。每个TXE事件后，数据从内存中移入此地址中。  
+2. 将内存地址写入DMA控制寄存器，作为DMA传输的源地址。每次TXE事件后，数据从此内存区写入USART_TDR寄存器中。  
+3. 在DMA控制寄存器中，配置传输总字节数。  
+4. 配置DMA通道优先级。  
+5. 根据需求，配置在传输完成一半/全部时，产生DMA中断。  
+6. 将USART_ICR中的TCCF位置1，清除USART_ISR中的TC标志。  
+7. 激活该DMA通道。  
+当达到DMA控制器设置的传输数据数量时，DMA控制器在该DMA通道中断向量上产生一个中断。  
+在发送模式下，一旦DMA发送完所有数据（DMA_ISR中的TCIF标志置1），可以监测TC标志，以确保USART通信完成。这是必要的，以避免破坏关闭USART或进入停机模式之前的最后一个传输，必须等待TC=1。TC标志在所有数据发送期间保持为0，并在最后一帧发送结束后，由硬件置1。  
+![](https://i.imgur.com/NcNPaKm.png)  
+#### 使用DMA进行接收  
+将USART_CR3中的DMAR位置1，使能利用DMA接收。每收到一个字节，数据就从USART_RDR寄存器中转移到DMA外设配置的SRAM区域。按以下步骤，为USART接收，配置一个DMA通道：  
+1. 将USART_RDR寄存器的地址写入DMA控制寄存器，作为DMA传输的源地址。每次RXNE事件后，数据从此地址转移到内存中。  
+2. 将内存地址写入DMA控制寄存器，作为DMA传输的目标地址。每次RXNE事件后，数据从USART_RDR写入该内存区域。  
+3. 在DMA控制寄存器中，配置传输总字节数。  
+4. 在DMA控制寄存器中，配置通道优先级。  
+5. 根据需求，配置传输一半/全部时，产生DMA中断。  
+6. 激活该DMA通道。  
+当达到DMA控制器设置的传输数据总数时，DMA控制器在该DMA通道中断向量上产生一个中断。  
+![](https://i.imgur.com/64qGSZm.png)  
+#### 多缓冲器通信中的错误标志和中断产生  
+在多缓冲器通信中，在传输期间发生任何错误，都会在当前字节传输完成后，将错误标志置1。如果相应的中断使能位为1，就会产生中断。在一个字节接收过程中，发生的帧错误、溢出错误和噪声标志会和RXNE一同置1，这些错误有一个单独的错误中断使能位（USART_CR3中的EIE位）；如果该中断使能位置1，发生这些错误中的任何一个，都会产生中断。  
+### USART实现RS232硬件流控制和RS485驱动器使能  
+利用CTS输入和RTS输出，可以控制2个器件之间的串行数据流。  
+![](https://i.imgur.com/FQPG7kI.png)  
+将USART_CR3中的RTSE和CTSE位置1，分别使能RS232的RTS和CTS流控制。  
+#### RS232 RTS流控制  
+如果RTS流控制被使能（RTSE=1），一旦USART接收器准备好接收新数据，RTS就生效，变为低电平。当接收寄存器满时，RTS失效变为高电平，指示希望当前帧结束后停止发送。  
+![](https://i.imgur.com/TIdt66D.png)  
+#### RS232 CTS流控制  
+如果CTS流控制被使能（CTSE=1），发送器在发送下一帧之前会检查CTS输入。如果CTS是有效低电平，则发送下一个数据（假设数据已准备好发送，换句话说TXE=0）；否则不会发送。如果发送期间CTS变为无效的高电平，当前帧发送完后，发送器则停止发送。  
+当CTSE=1时，CTSIF状态位跟随CTS输入变化，由硬件自动设置；它指示接收器是否准备好接收数据。如果USART_CR3中的CTSIE位置1，则产生中断。  
+![](https://i.imgur.com/8kCmeLx.png)  
+注：为了正确运行，CTS必须在当前帧结束前至少3个USART时钟源周期之前变为有效低电平。另外要注意，短于2个PCLK周期的脉冲可能无法置位CTSCF标志。  
+###### USART hardware flow control code example  
+
+    /* (1) oversampling by 16, 9600 baud */
+    /* (2) RTS and CTS enabled */
+    /* (3) 8 data bit, 1 start bit, 1 stop bit, no parity, reception and transmission enabled */
+    USART1->BRR = 480000 / 96; /* (1) */
+    USART1->CR3 = USART_CR3_RTSE | USART_CR3_CTSE; /* (2) */
+    USART1->CR1 = USART_CR1_TE | USART_CR1_RXNEIE | USART_CR1_RE | USART_CR1_UE; /* (3) */
+    /* Polling idle frame Transmission */
+    while ((USART1->ISR & USART_ISR_TC) != USART_ISR_TC)
+    {
+        /* add time out here for a robust application */
+    }
+    USART1->ICR |= USART_ICR_TCCF; /* Clear TC flag */
+    USART1->CR1 |= USART_CR1_TCIE; /* Enable TC interrupt */  
+#### RS485驱动使能  
+将USART_CR3中的DEM位置1，使能驱动器使能功能。这样用户可以使用DE（驱动使能）信号激活外部收发器控制。使能时间是从DE信号有效到起始位之间的时间，它通过USART_CR1中的DEAT[4:0]位设置。禁止时间是从发送消息的最后一个停止位结束到DE信号无效之间的时间，它通过USART_CR1中的DEDT[4:0]位设置。DE信号的极性可以通过USART_CR3中的DEP位配置。  
+在USART中，DEAT和DEDT以采样时间单位表示（根据过采样率，单位为1/8或1/16位持续时间）。  
+## USART低功耗模式  
+![](https://i.imgur.com/2S9W2C8.png)  
+## USART中断  
+![](https://i.imgur.com/9NLZImd.png)  
+USART中断事件都连接到同一个中断向量（见图244）。  
+- 发送期间：发送完成、CTS、发送数据寄存器空中断。  
+- 接收期间：空闲检测、溢出错误、接收数据寄存器非空、校验错误、噪声标志、帧错误、字符匹配等中断。  
+只有相应的中断使能位置1，这些事件才会产生中断。  
+![](https://i.imgur.com/2Ipc7rG.png)  
+## USART寄存器  
+### 控制寄存器1（USART_CR1）  
+![](https://i.imgur.com/ewVOn8M.png)  
+![](https://i.imgur.com/naWIVDD.png)  
+![](https://i.imgur.com/rXp7V3Q.png)  
+![](https://i.imgur.com/zXVAJRf.png)  
+![](https://i.imgur.com/L5K3zID.png)   
+![](https://i.imgur.com/yenQFw8.png)  
