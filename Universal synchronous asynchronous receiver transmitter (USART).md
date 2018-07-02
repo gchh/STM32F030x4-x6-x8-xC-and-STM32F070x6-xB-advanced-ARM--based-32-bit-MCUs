@@ -448,3 +448,41 @@ USART中断事件都连接到同一个中断向量（见图244）。
 ![](https://i.imgur.com/zXVAJRf.png)  
 ![](https://i.imgur.com/L5K3zID.png)   
 ![](https://i.imgur.com/yenQFw8.png)  
+### 控制寄存器2（USART_CR2）  
+![](https://i.imgur.com/su2TbFu.png)  
+![](https://i.imgur.com/NGBUlJb.png)  
+![](https://i.imgur.com/DlJjxnE.png)  
+![](https://i.imgur.com/d8bDlkG.png)  
+![](https://i.imgur.com/0tZcTUf.png)  
+![](https://i.imgur.com/OB12h6V.png)  
+### 控制寄存器3（USART_CR3）  
+![](https://i.imgur.com/v1hVzMq.png)  
+![](https://i.imgur.com/YbKGqOX.png)  
+![](https://i.imgur.com/iSXFLos.png)  
+![](https://i.imgur.com/7oreEbY.png)  
+![](https://i.imgur.com/0NuAg8R.png)  
+### 波特率寄存器（USART_BRR）  
+![](https://i.imgur.com/OsaWt2K.png)  
+### 接收超时寄存器（USART_RTOR）  
+![](https://i.imgur.com/PvAQekF.png)  
+![](https://i.imgur.com/oYRc755.png)  
+### 请求寄存器（USART_RQR）  
+![](https://i.imgur.com/sxKsbLb.png)  
+### 中断和状态寄存器（USART_ISR）  
+![](https://i.imgur.com/7sRC5Y6.png)  
+![](https://i.imgur.com/Rfpdmj9.png)  
+![](https://i.imgur.com/IgrPGVo.png)  
+![](https://i.imgur.com/j3KjOBo.png)  
+![](https://i.imgur.com/ACX5nr8.png)  
+![](https://i.imgur.com/lUq99ca.png)  
+![](https://i.imgur.com/JQKaMUL.png)  
+### 中断标志清除寄存器（USART_ICR）  
+![](https://i.imgur.com/FkRxGZu.png)  
+![](https://i.imgur.com/aBEmOWC.png)  
+### 接收数据寄存器（USART_RDR）  
+![](https://i.imgur.com/wknLZ5F.png)  
+### 发送数据寄存器（USART_TDR）  
+![](https://i.imgur.com/WdGcRKV.png)  
+## USART寄存器映射  
+![](https://i.imgur.com/am9YeVZ.png)  
+![](https://i.imgur.com/2MYr1uL.png)  
