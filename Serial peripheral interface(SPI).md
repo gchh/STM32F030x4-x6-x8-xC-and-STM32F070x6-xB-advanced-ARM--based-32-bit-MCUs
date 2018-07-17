@@ -73,3 +73,76 @@ SPI支持MCU根据不同的目标器件和应用需求，使用不同的配置�
 ![](https://i.imgur.com/Z0Bf61S.png)  
 1. 2个节点的NSS引脚都要配置为输入。NSS上的有效电平会使能MISO线的输出控制，当被动节点配置为从器件时。  
 ### 从器件选择（NSS）引脚管理  
+在从模式下，NSS作为片选输入，使从器件和主器件通信。在主模式下，NSS可以用作输出或输入。作为输入，它可以防止多主模式总线冲突；作为输出，它可以驱动单个从器件的从器件选择信号。  
+使用硬件或软件管理从器件选择，由SPIx_CR1中的SSM位选择：  
+- 软件NSS管理（SSM=1）：由SPIx_CR1中的SSI位的值来选择从器件。NSS引脚可以作其他用。  
+- 硬件NSS管理（SSM=0）：有2种可能的配置：取决于NSS输出配置（SPIx_CR1中的SSOE位）。  
+　- NSS输出使能（SSM=0，SSOE=1）：主器件才能使用此配置。NSS引脚由硬件管理。主器件使能SPI（SPE=1），NSS就输出低电平，并保持低电平直到关闭SPI（SPE=0）。如果NSS脉冲模式打开（NSSP=1），在连续通信期间会产生脉冲。多主器件不能用此配置。  
+　- NSS输出禁止（SSM=0，SSOE=0）：多主器件通信可以使用此配置。拉低NSS，SPI将进入主模式故障状态并自动重新配置为从模式。从模式下，NSS作为片选输入，当其为低电平时，选中该从器件。  
+![](https://i.imgur.com/XAw8IXK.png)  
+### 通信格式  
+在SPI通信中，接收和发送同时执行。串行时钟（SCK）使数据线上的移位和采样同步。通信格式取决于时钟相位、时钟极性和数据帧格式。为了能够通信，主器件和从器件必须遵循相同的通信格式。  
+#### 时钟相位和极性控制  
+使用SPIx_CR1中的CPOL和CPHA位，可以选择4种可能的时序关系。CPOL（时钟极性）控制当无数据传输时，空闲状态的时钟值。该位对主/从模式都有用。如果CPOL=0，SCK引脚在空闲状态输出低电平；CPOL=1，SCK引脚在空闲状态输出高电平。  
+如果CPHA=1，则在时钟的第二边沿捕获传输的第一个数据位（如果CPOL=0，该边沿为下降沿；CPOL=1，为上升沿）。每次出现该时钟边沿时，数据被锁存。如果CPHA=0，SCK引脚上的第一个边沿捕获传输的第一个数据位（CPOL=0，该边沿为上升沿；CPOL=1，为下降沿）。每次出现该时钟边沿时，数据被锁存。  
+CPOL（时钟极性）和CPHA（时钟相位）共同决定数据捕获的时钟边沿。  
+图252显示了在SPI全双工传输时，CPHA和CPOL的4种组合。  
+注：在改变CPOL/CPHA位之前，要先将SPE位清零来关闭SPI。  
+SCK的空闲状态必须符合SPIx_CR1中的极性选择（CPOL=1，拉高SCK；CPOL=0，拉低SCK）。  
+![](https://i.imgur.com/hqRwEoi.png)  
+#### 数据帧格式  
+LSBFIRST位的值，决定了SPI移位寄存器移出数据MSB在前或LSB在前。数据帧的长度由DS位选择，可以设置为4到16位长，对接收和发送都有效。无论数据帧长度如何，对FIFO的读访问必须与FRXTH水平对齐。当访问SPIx_DR寄存器时，数据帧总是按字节（数据不超过一个字节）或半字右对齐。通信工程中，只有数据帧内的位才会提供时钟和传输。  
+![](https://i.imgur.com/2bFuxWs.png)  
+注：数据长度最小为4。如果选择的数据长度小于4，会强制数据帧长度为8位。  
+### 配置SPI  
+主模式和从模式的配置流程几乎相同。标准通信的初始化，执行下列步骤：  
+1. 配置相关的GPIO寄存器：将相应的GPIO配置为MOSI、MISO和SCK引脚。  
+2. 配置SPI_CR1寄存器：  
+　a) 通过BR[2:0]位配置串行时钟的波特率（注：4）。  
+　b) 配置CPOL和CPHA位（在NSSP模式下，CPHA必须清零）（注：2-除了TI模式下CRC使能的情况）。  
+　c) 配置RXONLY位选择单工模式；配置BIDIMODE和BIDIOE位选择半双工模式（RXONLY和BIDIMODE不能同时置1）。  
+　d) 配置LSBFIRST位，定义帧格式（注：2）。  
+　e) 如果需要CRC，配置CRCL和CRCEN位（当SCK时钟信号在空闲状态时）。  
+　f) 配置SSM和SSI（注：2和3）。  
+　g) 配置MSTR位（在多主机NSS配置中，如果主控器配置为防止MODF错误，则避免NSS上的冲突状态）。  
+3. 配置SPI_CR2寄存器：  
+　a) 配置DS[3:0]位，选择传输的数据帧长度。  
+　b) 配置SSOE位（注：1、2和3）。  
+　c) 如果使用TI模式，将FRF位置1（保持NSSP位为0）。  
+　d) 如果2个数据单元之间需要NSS脉冲，将NSSP位置1（在NSSP模式，保持CHPA和TI位为0）。  
+　e) 配置FRXTH位。RXFIFO阈值必须和SPIx_DR寄存器的读访问大小相同。  
+　f) 如果在封装模式下使用DMA，初始化LDMA_TX和LDMA_RX位。  
+4. 配置SPI_CRCPR寄存器：配置CRC多项式，如果需要。  
+5. 配置相应的DMA寄存器：配置SPI Tx和Rx专用的DMA数据流，如果使用DMA数据流。  
+注：（1）从器件不需要配置该步骤。  
+　　（2）TI模式不需要配置该步骤。  
+　　（3）NSSP模式不需要配置该步骤。  
+　　（4）除了从器件工作于TI模式外，从器件不需要配置该步骤。  
+###### SPI master configuration code example  
+
+    /* (1) Master selection, BR: Fpclk/256 (due to C27 on the board, SPI_CLK is
+           set to the minimum) CPOL and CPHA at zero (rising first edge) */
+    /* (2) Slave select output enabled, RXNE IT, 8-bit Rx fifo */
+    /* (3) Enable SPI1 */
+    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_BR; /* (1) */
+    SPI1->CR2 = SPI_CR2_SSOE | SPI_CR2_RXNEIE | SPI_CR2_FRXTH
+              | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; /* (2) */
+    SPI1->CR1 |= SPI_CR1_SPE; /* (3) */    
+###### SPI slave configuration code example  
+
+    /* nSS hard, slave, CPOL and CPHA at zero (rising first edge) */
+    /* (1) RXNE IT, 8-bit Rx fifo */
+    /* (2) Enable SPI2 */
+    SPI2->CR2 = SPI_CR2_RXNEIE | SPI_CR2_FRXTH 
+              | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; /* (1) */
+    SPI2->CR1 |= SPI_CR1_SPE; /* (2) */  
+### SPI使能步骤  
+建议在主器件发送时钟前，使能SPI从器件。否则，可能发生不希望的数据传输。在和主器件开始通信前（在通信时钟的第一个边沿之前，或，如果时钟信号连续，则在正进行的通信结束前），从器件要发送的数据必须已经存入了数据寄存器中。在SPI从器件使能之前，SCK信号必须保持稳定在所选的空闲状态电平。  
+当SPI使能，且TXFIFO不为空或向TXFIFO写入下一个数据时，配置为全双工或只发模式的主器件开始通信。  
+配置为只收模式（RXONLY=1，或BIDIMODE=1并且BIDIOE=0）的主器件，在SPI使能后，马上开始通信，同时时钟开始运行。  
+### 数据发送和接收过程  
+#### RXFIFO和TXFIFO  
+所有的SPI数据交换都是通过内置的FIFO进行的。这使得SPI可以连续工作，并防止数据帧较短时发生溢出。每个方向都有自己的FIFO被称为TXFIFO和RXFIFO。这些FIFO用于除使能CRC计算的只收模式（主/从器件）外的所有SPI模式。  
+FIFO的处理取决于数据交换的模式（双工、单工），数据帧格式（一帧的位数），FIFO数据寄存器的访问大小（8位或16位），以及是否使用数据包访问FIFO。  
+读SPIx_DR寄存器，会返回RXFIFO中还未读取的最早的值。写入SPIx_DR寄存器的新值，会放在TXFIFO中发送队列的尾部。读访问必须和SPIx_CR2中的FRXTH位配置的RXFIFO阈值相一致。FTLVL[1:0]和FRLVL[1:0]会指出2个FIFO的占用水平。  
+对SPIx_DR寄存器的读取必须由RXNE事件管理。当有数据存入RXFIFO并且达到了FRXTH位定义的阈值时，该事件触发。当RXNE被清除，RXFIFO被认为空。类似的，待发送数据帧的写访问由TXE事件管理。当TXFIFO中的数据不超过其容量的一半时，该事件触发。否则，TXE被清除，TXFIFO被认为满。
