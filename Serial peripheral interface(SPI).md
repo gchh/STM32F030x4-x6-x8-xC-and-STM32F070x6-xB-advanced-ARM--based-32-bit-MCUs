@@ -221,4 +221,8 @@ BSY=1表示正在进行数据传输。当时钟信号连续运行时，在主器
 2. 按照关闭SPI的步骤，关闭SPI。  
 3. 如果使用DMA TX和或DMA RX，将SPI_CR2中的TXDMAEN和或RXDMAEN位清零，关闭DMA TX和或DMA RX缓冲区。  
 #### 使用DMA时的数据封装  
-如果传输由DMA管理（SPIx_CR2中的TXDMAEN=1和RXDMAEN=1），根据为SPI TX和SPI RX DMA通道配置的PSIZE值，自动打开/关闭封装模式。
+如果传输由DMA管理（SPIx_CR2中的TXDMAEN=1和RXDMAEN=1），根据为SPI TX和SPI RX DMA通道配置的PSIZE值，自动打开/关闭封装模式。如果DMA通道的PSIZE值＝16-bit，而SPI数据帧长度≤8-bit，那么封装模式使能。DMA自动管理对SPIx_DR寄存器的写操作。  
+如果使用数据封装，但传输的数据量不是偶数，那么LDMA_TX/LDMA_RX位必须置1。SPI就认为最后一次DMA传输只需发送或接收一个数据。  
+#### 通信图表  
+本部分介绍一些典型的时序图。无论SPI事件通过轮询、中断或DMA来处理，这些时序图都是有效的。为了简单起见，这里均假设LSBFIRST=0、CPOL=0和CPHA=1。不提供完整的DMA流配置。  
+下面带编号的注释适用于图255到图258。  
