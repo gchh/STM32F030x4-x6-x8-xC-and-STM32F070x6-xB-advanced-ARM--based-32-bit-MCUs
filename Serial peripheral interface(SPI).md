@@ -145,4 +145,80 @@ LSBFIRST位的值，决定了SPI移位寄存器移出数据MSB在前或LSB在前
 所有的SPI数据交换都是通过内置的FIFO进行的。这使得SPI可以连续工作，并防止数据帧较短时发生溢出。每个方向都有自己的FIFO被称为TXFIFO和RXFIFO。这些FIFO用于除使能CRC计算的只收模式（主/从器件）外的所有SPI模式。  
 FIFO的处理取决于数据交换的模式（双工、单工），数据帧格式（一帧的位数），FIFO数据寄存器的访问大小（8位或16位），以及是否使用数据包访问FIFO。  
 读SPIx_DR寄存器，会返回RXFIFO中还未读取的最早的值。写入SPIx_DR寄存器的新值，会放在TXFIFO中发送队列的尾部。读访问必须和SPIx_CR2中的FRXTH位配置的RXFIFO阈值相一致。FTLVL[1:0]和FRLVL[1:0]会指出2个FIFO的占用水平。  
-对SPIx_DR寄存器的读取必须由RXNE事件管理。当有数据存入RXFIFO并且达到了FRXTH位定义的阈值时，该事件触发。当RXNE被清除，RXFIFO被认为空。类似的，待发送数据帧的写访问由TXE事件管理。当TXFIFO中的数据不超过其容量的一半时，该事件触发。否则，TXE被清除，TXFIFO被认为满。
+对SPIx_DR寄存器的读取必须由RXNE事件管理。当有数据存入RXFIFO并且达到了FRXTH位定义的阈值时，该事件触发。当RXNE被清除，RXFIFO被认为空。类似的，待发送数据帧的写访问由TXE事件管理。当TXFIFO中的数据不超过其容量的一半时，该事件触发。否则，TXE被清除，TXFIFO被认为满。当数据帧不超过8位时，RXFIFO最多可以存储4个数据帧，而TXFIFO最多只能存储3个数据帧。这种差异可以防止TXFIFO中已经有3个8位数据帧存在时，软件试图在16位模式下向其中写入更多数据，从而造成已有数据损坏的情况。TXE和RXNE事件可以通过轮询和中断来处理。  
+另一种管理数据交换的方式是使用DMA。  
+当RXFIFO满时，收到数据，会导致发送溢出事件。溢出事件可以通过查询或中断处理。  
+BSY=1表示正在进行数据传输。当时钟信号连续运行时，在主器件中，数据帧之间BSY标志依然保持1；而在从器件中，数据帧之间BSY标志会变为0并保持一个SPI时钟周期的时间。  
+#### 序列处理  
+可以通过单个序列传递几个数据帧来完成消息。当发送使能后，只要主器件的TXFIFO中存在数据，序列就开始并持续。主器件持续提供时钟直到TXFIFO变为空，然后时钟停止等待另外的数据。  
+在只收模式，半双工（BIDIMODE=1，BIDIOE=0）或单工（BIDIMODE=0，RXONLY=1），只要SPI和只收模式被使能，主器件立即开始接收序列。主器件提供时钟直到SPI或只读模式被关闭。在此之前，主器件会连续接收数据帧。  
+主器件在连续模式下工作，必须要考虑到从器件处理数据的能力。必要时，主器件必须降低通信速度，提供更慢的时钟，或是在帧或数据段之间加入足够的延时。注意，在SPI模式下没有主器件或从器件的下溢错误信号，来自从器件的数据总是由主器件发起接收并处理，即使从器件不能正确及时将数据准备好。所以，从器件最好使用DMA，尤其当数据帧较短且总线速率较高时。  
+在多从器件系统中，每个序列都要由NSS脉冲控制，以只选中其中一个从器件来进行通信。在单个从器件系统中，不需要NSS来选择从器件；但是，提供NSS脉冲更好，可以将从器件和每个数据序列的开始进行同步。NSS可以有软件或硬件进行管理。  
+当BSY=1时，表示有数据帧传输正在进行。当一帧传输完成，RXNE标志被置1。最后一位采样后，完整的数据帧会被存入RXFIFO中。  
+#### 关闭SPI的步骤  
+要关闭SPI，必须按照本段中介绍的步骤进行操作。当外设时钟停止，系统进入低功耗模式之前，按步操作很重要；否则，正在进行的传输可能被破环。在某些模式下，按照步骤关闭SPI是停止连续通信的唯一方法。  
+处于全双工或只发模式的主器件可以停止发送数据，以结束传输。这种情况下，时钟在最后一个数据传输后停止。必须特别注意在封装模式下，当奇数个数据帧被传输以防止一些虚拟字节交换时。在这些模式下关闭SPI之前，用户必须遵守标准的关闭步骤。当关闭SPI时，主器件正发送数据或下一个数据帧已经存入TXFIFO，将无法保证SPI的行为。  
+当主器件处于只收模式时，停止连续时钟的唯一方法是SPE=0关闭SPI。必须在传输的最后一帧数据的第一位采样与最后一位传输开始之前的时间段内，关闭SPI（为了接收完整的有效字节，并避免接收有效字节后接收到任何空数据）。这种模式下，必须执行特定的步骤来关闭SPI。  
+关闭SPI后，已接收但还未读取的数据会依然保留在RXFIFO中，下次打开SPI，开始新的序列之前，要处理掉这些数据。要确保没有未读取的数据，可以执行正确的关闭操作来保证关闭SPI时RXFIFO为空，或者通过控制外设复位的特定寄存器用软件复位的方式初始化所有SPI寄存器（参见RCC_APBiRSTR寄存器中的SPIiRST位）。  
+标准的关闭步骤是基于检查BSY状态和FTLVL[1:0]来判断传输是否完全结束。当需要识别正在进行的传输结束时，也可以进行这种检查，例如：  
+- 当NSS信号由软件管理，主器件需要向从器件提供正确的NSS脉冲结束时，或  
+- 当来自DMA或FIFO的传输流完成，而最后一个数据帧或CRC帧还在总线上传输时。  
+正确的关闭步骤是（除使用只收模式外）：  
+1. 等待FTLVL[1:0]=00（没有数据要发送）  
+2. 等待BSY=0（最后一帧数据已经处理完）  
+3. 关闭SPI（SPE=0）  
+4. 读取数据，直到FRLVL[1:0]=00（读取所有已接收的数据）  
+某些只收模式的正确关闭步骤：  
+1. 在接收最后一个数据帧的特定时间窗口内关闭SPI（SPE=0）  
+2. 等待BSY=0（最后一帧数据已经处理完）  
+3. 读取数据，直到FRLVL[1:0]=00（读取所有接收到的数据）  
+注：如果使用封装模式，并且要接收奇数个帧大小≤8bits的数据帧，FRXTH必须在FRLVL[1:0]=01时设为1，以产生RXNE事件从而读取最后的奇数帧并保持FIFO指针对齐。  
+#### 数据封装  
+当数据帧大小适合一个字节（≤8bits）时，对SPIx_DR寄存器的16-bit读写，会自动将数据打包起来。这种情况，将并行处理2个数据帧。SPI先对低8位进行操作，然后是高8位。图254给出了数据打包模式下数据处理的例子。对发送器的SPIx_DR一次16-bit写访问，将发送2个数据帧。如果接收器的RXFIFO阈值设为16位（FRXTH=0），这2个数据帧只产生一个RXNE事件。作为对这次RXNE事件的响应，接收器必须按16-bit读取SPIx_DR来一次读取这2个数据帧。在接收器端，RXFIFO阈值的设置必须和后续SPIx_DR的读取位数保持一致，否则，会丢失数据。  
+如果要处理奇数个此类“不超过一个字节”的数据帧，会出现特定的问题。在发送端，只需用8-bit的访问方式将最后一帧写入SPIx_DR。而，接收端需要改变RXFIFO阈值，以在最后一帧接收后产生RXNE事件。  
+![](https://i.imgur.com/Qx0WVCY.png)  
+#### 使用DMA进行通信  
+为了以最大速度工作，并提高读写速度以避免溢出，SPI提供了DMA功能，该功能采用简单的请求/应答协议。  
+当SPIx_CR2寄存器中的TXE或RXNE位置1时，发出DMA请求。向TX和RX缓冲区发送的请求是独立的。  
+- 发送时，每次TXE=1发出DMA请求。然后DMA向SPIx_DR寄存器写入数据。  
+- 接收时，每次RXNE=1时发出DMA请求。然后DMA从SPIx_DR寄存器中读取数据。  
+见图255到图258。  
+当SPI只用来发送数据时，可以只使能SPI TX DMA通道。这种情况下，OVR标志被置1，因为不会读取接收数据。当SPI只用来接收数据时，可以只使能SPI RX DMA通道。  
+在发送模式下，当DMA已将所有要发送的数据写入SPIx_DR（DMA_ISR中的TCIF标志置1），可以监视BSY标志以确保SPI通信完成。在关闭SPI或进入停机模式之前，要求避免破环最后的传输。软件首先等待FTLVL[1:0]=00然后等待BSY=0。  
+当使用DMA进行通信时，要防止DMA通道管理引起错误事件，必须遵循下面的步骤：  
+1. 如果使用DMA RX，将SPI_CR2中的RXDMAEN位置1，使能DMA RX缓冲区。  
+2. 如果使用数据流，在DMA寄存器中使能TX和RX的DMA数据流。  
+3. 如果使用DMA TX，将SPI_CR2中的TXDMAEN位置1，使能DMA TX缓冲区。  
+4. SPE位置1，使能SPI。  
+###### SPI master configuration with DMA code example  
+
+    /* (1) Master selection, BR: Fpclk/256 
+           (due to C27 on the board, SPI_CLK is set to the minimum)
+           CPOL and CPHA at zero (rising first edge) */
+    /* (2) TX and RX with DMA,
+           enable slave select output,
+           enable RXNE interrupt,
+           select 8-bit Rx fifo */
+    /* (3) Enable SPI1 */
+    SPI1->CR1 = SPI_CR1_MSTR | SPI_CR1_BR; /* (1) */
+    SPI1->CR2 = SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN | SPI_CR2_SSOE
+              | SPI_CR2_RXNEIE | SPI_CR2_FRXTH
+              | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; /* (2) */
+    SPI1->CR1 |= SPI_CR1_SPE; /* (3) */  
+###### SPI slave configuration with DMA code example  
+
+    /* nSS hard, slave, CPOL and CPHA at zero (rising first edge) */
+    /* (1) Select TX and RX with DMA,
+           enable RXNE interrupt,
+           select 8-bit Rx fifo */
+    /* (2) Enable SPI2 */
+    SPI2->CR2 = SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN
+              | SPI_CR2_RXNEIE | SPI_CR2_FRXTH
+              | SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0; /* (1) */
+    SPI2->CR1 |= SPI_CR1_SPE; /* (2) */  
+要关闭通信，必须按顺序执行下面的步骤：  
+1. 如果使用数据流，在DMA寄存器中关闭TX和RX的DMA数据流。  
+2. 按照关闭SPI的步骤，关闭SPI。  
+3. 如果使用DMA TX和或DMA RX，将SPI_CR2中的TXDMAEN和或RXDMAEN位清零，关闭DMA TX和或DMA RX缓冲区。  
+#### 使用DMA时的数据封装  
+如果传输由DMA管理（SPIx_CR2中的TXDMAEN=1和RXDMAEN=1），根据为SPI TX和SPI RX DMA通道配置的PSIZE值，自动打开/关闭封装模式。
