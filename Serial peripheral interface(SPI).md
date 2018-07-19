@@ -333,3 +333,71 @@ t<sub>baud_rate</sub>/2 + 4 × t<sub>pclk</sub> ＜ t<sub>release</sub> ＜ t<su
 ### CRC计算  
 2个独立的CRC计算器分别用于检查发送数据和接收数据的可靠性。SPI提供CRC8或CRC16计算，与帧的数据宽度设置为8-bit或16-bit无关；但是对于其他帧宽度，CRC不适用。  
 #### CRC原理  
+在SPI使能（SPE=1）之前，将SPIx_CR1寄存器中的CRCEN位置1，使能CRC计算。CRC值由一个值为奇数的可编程多项式对每一位进行计算得到。在SPIx_CR1中的CPHA和CPOL位定义的采样时钟边沿进行计算。计算得到的CRC值在由CPU或DMA管理传输的数据块末尾自动被检查。当根据接收数据计算出的CRC值和发送来的CRC不匹配时，CRCERR标志置1，指出数据损坏。CRC计算的正确步骤取决于SPI的配置和所选的传输管理。  
+注：多项式的值只能是奇数，不支持偶数。  
+#### CPU管理CRC传输  
+通信开始和持续如常，直到最后的数据帧被发送或接收。CRCNEXT必须在最后一帧数据传输完成之前置1，以便在最后一帧数据传输完后发送或接收CRC帧。在CRC传输期间，CRC计算被冻结。  
+接收的CRC以字节或字的形式存放在RXFIFO中。这就是在CRC模式下，接收缓冲区被视为一个16-bit缓冲区，一次只能接收一个数据帧的原因。  
+通常在数据序列的末尾再传输一帧CRC帧。但是，当数据帧长度设为8-bit而做16-bit CRC校验时，则需要2帧才能完整发送CRC。  
+当最后的CRC数据被接收后，自动与SPIx_RXCRC寄存器中的值进行比较。软件需要检查SPIx_SR中的CRCERR标志以确定接收的数据是否损坏。向CRCERR标志写0，可以将其清除。  
+接收CRC后，CRC存入RXFIFO，必须读取SPIx_DR寄存器，以清除RXNE标志。  
+#### DMA管理CRC传输  
+当带CRC和DMA模式的SPI通信被使能，在通信的结尾自动发送和接收CRC（在只收模式下CRC的接收除外）。CRCNEXT位不必再由软件处理。SPI发送的DMA通道计数器设置的要发送数据帧的个数不能包括CRC帧。在接收端，接收的CRC值在传输结束时由DMA自动处理，但是用户必须注意刷除RXFIFO中的CRC，因为CRC总是被载入RXFIFO中。在全双工模式中，接收的DMA通道的计数器设置的要接收的数据帧个数必须包括CRC帧，这意味着，在数据帧长度为8-bit而CRC为16-bit时：  
+DMA_RX=Numb_of_data + 2   
+在只收模式，DMA接收通道计数器应该只包含传输数据的数量，而不包括CRC。在DMA传输完成后，软件从FIFO中读取CRC值，因为在此模式下FIFO作为单个缓冲区。  
+如果在传输过程中出现损坏，数据和CRC传输完后，SPIx_SR寄存器中的CRCERR标志被置1。  
+如果使用封装模式，当要传输的数据个数是奇数时，需要用LDMA_RX位来管理。  
+#### 重置SPIx_TXCRC和SPIx_RXCRC的值  
+SPIx_TXCRC和SPIx_RXCRC的值在CRC阶段后对新数据采样时，会被自动清零。这就允许使用DMA循环模式（只收模式除外）不间断的传输数据（一些数据块会被中间进行的CRC校验阶段覆盖）。  
+要在通信过程中关闭SPI，必须遵循以下步骤：  
+1. 关闭SPI  
+2. CRCEN位清零  
+3. CRCEN位置1  
+4. 使能SPI  
+注：当SPI处于从模式时，只要CRCEN位被置1，且SCK引脚上有输入时钟，CRC计数器就会工作，而不关心SPE位的值如何。为了避免任何错误的CRC计算，软件必须等时钟稳定后再使能CRC计算。  
+当SPI接口被配置为从模式，一旦CRCNEXT信号被释放，在CRC传输阶段NSS内部信号要保持低电平。这就是CRC计算在从模式NSS脉冲模式下不能使用的原因。  
+在TI模式，尽管时钟相位和极性的设置是固定的且和SPIx_CR1寄存器无关，但是如果要使用CRC，必须在SPIx_CR1寄存器中设置CPOL=0和CPHA=1。另外，在主器件和从器件关闭SPI重新使能CRCEN期间，CRC计算要重置，否则CRC计算会损坏。  
+## SPI中断  
+在SPI通信期间，下列事件会导致中断产生：  
+- TXFIFO准备好装入数据，TXE=1  
+- RXFIFO接收到数据，RXNE=1  
+- 主器件模式故障，MODF=1  
+- 溢出错误，OVR=1  
+- TI帧格式错误，FRE=1  
+- CRC错误，CRCERR=1  
+中断可以单独使能和禁止。  
+![](https://i.imgur.com/zqTJBWC.png)  
+###### SPI interrupt code example  
+
+	if ((SPI1->SR & SPI_SR_RXNE) == SPI_SR_RXNE)
+	{
+		SPI1_Data = (uint8_t)SPI1->DR; /* receive data, clear flag */
+		/* Process */
+	}  
+## SPI寄存器  
+### SPI控制寄存器1（SPIx_CR1）  
+![](https://i.imgur.com/FvuJZ6y.png)  
+![](https://i.imgur.com/367JB5t.png)  
+![](https://i.imgur.com/834FQdn.png)  
+![](https://i.imgur.com/lVGi6yB.png)  
+![](https://i.imgur.com/R8HYZpi.png)  
+### SPI控制寄存器2（SPIx_CR2）  
+![](https://i.imgur.com/ZYXfomP.png)  
+![](https://i.imgur.com/BR6O6jt.png)  
+![](https://i.imgur.com/w7pgs1F.png)  
+![](https://i.imgur.com/4OjRSHV.png)  
+![](https://i.imgur.com/bDJ6Xyu.png)  
+### SPI状态寄存器（SPIx_SR）  
+![](https://i.imgur.com/g22wwco.png)  
+![](https://i.imgur.com/qRUqFad.png)  
+![](https://i.imgur.com/hnYUKHy.png)  
+### SPI数据寄存器（SPIx_DR）  
+![](https://i.imgur.com/Von9Nvc.png)  
+### SPI CRC多项式寄存器（SPIx_CRCPR）  
+![](https://i.imgur.com/7L2ecpl.png)  
+### SPI Rx CRC寄存器（SPIx_RXCRCR）  
+![](https://i.imgur.com/LaNskSZ.png)  
+### SPI Tx CRC寄存器（SPIx_TXCRCR）  
+![](https://i.imgur.com/kLdWksX.png)  
+## SPI寄存器映射  
+![](https://i.imgur.com/qF62ASZ.png)  
